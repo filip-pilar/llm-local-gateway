@@ -18,12 +18,18 @@ loopback transports. Provider startup and readiness are intentionally
 independent.
 
 The source repositories remain unchanged. Their Git directories, build output,
-macOS app output, caches, logs, and `node_modules` were not copied.
+caches, logs, and `node_modules` were not copied. The unified native app was
+derived from both source apps and then renamed and adapted for the combined
+provider lifecycle.
 
-## Deferred
+## Added after the CLI baseline
 
-- unified macOS application and service packaging;
+- unified macOS menu-bar app and signed local packaging;
+- bounded live OpenAI and Claude text/streaming/tool-call conformance;
+- real Codex and Claude child-agent routing checks for both providers.
+
+## Deliberately omitted
+
 - provider fallback;
 - additional providers or a plugin API;
 - remote listener support;
-- live provider conformance runs beyond explicitly approved quota use.

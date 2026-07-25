@@ -5,6 +5,7 @@ import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { supportedModels } from "../../src/core/providers.mjs";
 import { startBridge } from "../../src/service/bridge.mjs";
 
 if (process.env.LLM_GATEWAY_LIVE_COMPAT !== "1") {
@@ -17,7 +18,7 @@ assert.equal(bridgeUrl.hostname, "127.0.0.1", "live bridge must use loopback");
 const bridgePort = Number(bridgeUrl.port || "80");
 assert.ok(Number.isInteger(bridgePort) && bridgePort > 0, "live bridge requires an explicit loopback port");
 const model = process.env.LLM_GATEWAY_LIVE_MODEL ?? "grok-4.5";
-assert.equal(model, "grok-4.5", "only the verified Grok 4.5 model is allowed");
+assert.ok(supportedModels.includes(model), `unsupported live gateway model: ${model}`);
 const repeats = Number(process.env.LLM_GATEWAY_LIVE_REPEATS ?? 3);
 assert.ok(Number.isInteger(repeats) && repeats >= 1 && repeats <= 5, "repeat count must be between 1 and 5");
 const selectedHarnesses = new Set((process.env.LLM_GATEWAY_LIVE_HARNESSES ?? "codex,claude").split(",").map((value) => value.trim()));
@@ -211,18 +212,18 @@ async function runCodexChildOnly(iteration) {
   let execProof = null;
   if (requireCodexExec) {
     const emittedCalls = publicResponses.flatMap((response) => response.tool_calls);
-    assert.equal(emittedCalls.length, 1, "Grok must emit exactly one child tool call");
+    assert.equal(emittedCalls.length, 1, "The routed model must emit exactly one child tool call");
     assert.equal(emittedCalls[0].type, "custom_tool_call");
     assert.equal(emittedCalls[0].name, "exec");
-    assert.equal(emittedCalls[0].invokes_exec_command, true, "Grok exec payload did not invoke tools.exec_command");
+    assert.equal(emittedCalls[0].invokes_exec_command, true, "Routed exec payload did not invoke tools.exec_command");
     assert.equal(publicRequests[1].body.input.function_calls.filter((call) => call.type === "custom_tool_call" && call.name === "exec").length, 1);
     assert.equal(publicRequests[1].body.input.function_call_outputs, 1, "Codex did not return the local exec result to the child");
     assert.ok(publicRequests[1].body.input.function_call_output_token_hashes.includes(hash(nonce)), "local exec output did not carry the file nonce into the second child turn");
     if (publicResponses[1]) {
-      assert.equal(publicResponses[1].tool_calls.length, 0, "second Grok turn unexpectedly emitted another tool call");
+      assert.equal(publicResponses[1].tool_calls.length, 0, "second routed turn unexpectedly emitted another tool call");
       assert.ok(
         publicResponses[1].stream_event_types.includes("response.completed"),
-        `second Grok inference turn did not complete: ${JSON.stringify({
+        `second routed inference turn did not complete: ${JSON.stringify({
           events: publicResponses[1].stream_event_types,
           status: publicResponses[1].status,
           error_type: publicResponses[1].error_type,
@@ -239,7 +240,7 @@ async function runCodexChildOnly(iteration) {
     assert.equal(new Set(childIds).size, 1, "tool result returned on a different Codex child thread");
     assert.ok(publicRequests.every((request) => request.headers["x-openai-subagent"]?.present === true), "Codex child identity header was not preserved");
     execProof = {
-      grok_exec_calls: 1,
+      provider_exec_calls: 1,
       emitted_custom_tool_call: true,
       exec_payload_invoked_exec_command: true,
       local_tool_results_returned: 1,
@@ -282,7 +283,7 @@ async function runCodexChildOnly(iteration) {
       lifecycle_completed: true,
       identity_cleanup: true,
     },
-    parent_orchestration_tools_sent_to_grok: false,
+    parent_orchestration_tools_sent_to_provider: false,
   };
 }
 
@@ -424,7 +425,7 @@ async function runClaudeChildOnly(iteration) {
       subagent_stop: true,
       identity_cleanup: true,
     },
-    parent_agent_tool_sent_to_grok: false,
+    parent_agent_tool_sent_to_provider: false,
   };
 }
 

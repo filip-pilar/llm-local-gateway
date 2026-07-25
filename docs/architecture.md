@@ -105,7 +105,14 @@ src/service/diagnostics.mjs     provider and endpoint status
 src/transport/devin.mjs         Devin/Windsurf startup
 src/transport/grok.mjs          Grok OAuth transport
 src/transport/anthropic-*.mjs   Grok Anthropic adapter
+macos/LLMGatewayApp             unified native menu-bar controller
+bin/build-macos-app.mjs         signed local app packaging
 ```
 
+The native app bundles the same compiled helper, supervises it with a parent
+lifeline, and surfaces independent authentication and readiness for both
+providers. Its explicit verification action makes bounded real OpenAI and
+Claude requests only for ready providers.
+
 The first release deliberately omits generic plugins, automatic provider
-fallback, remote binding, and the unified macOS app.
+fallback, and remote binding.

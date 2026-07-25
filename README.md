@@ -112,15 +112,48 @@ directory, default model, Devin credentials, and Grok home.
 
 ```bash
 npm test
+npm run test:native
 ```
 
 The default suite is non-live: it uses loopback fixtures and mocked upstreams,
 does not perform inference, and does not consume Devin or Grok quota. Live
-replay and compatibility harnesses are separately gated by explicit
-`LLM_GATEWAY_*` environment variables.
+provider and child-agent harnesses are separately gated by explicit
+`LLM_GATEWAY_*` environment variables:
 
-The macOS application is intentionally deferred. The current deliverable is the
-CLI/daemon and optional compiled helper:
+```bash
+LLM_GATEWAY_LIVE_CONFORMANCE=1 \
+  LLM_GATEWAY_LIVE_MODELS=swe-1-6-slow,grok-4.5 \
+  npm run test:live-providers
+
+LLM_GATEWAY_LIVE_COMPAT=1 \
+  LLM_GATEWAY_LIVE_MODEL=swe-1-6-slow \
+  LLM_GATEWAY_LIVE_CODEX_EXEC=1 \
+  npm run test:live-subagents
+```
+
+These commands consume provider quota. `swe-1-7-lightning` also requires that
+the authenticated Devin account is entitled to the Lightning model.
+
+## macOS app
+
+The unified menu-bar app supervises the same loopback helper and keeps Devin
+and Grok sign-in, status, readiness, and logout independent. It exposes both
+endpoint URLs, supports all three default models, can launch at login, and has
+an explicit bounded live-verification action.
+
+Build signed local app bundles:
+
+```bash
+npm run build:macos
+npm run build:macos:debug
+```
+
+The release bundle is written to `dist/LLM Gateway.app`. The debug bundle opens
+a normal window for UI testing and defaults to isolated port 4717. Both bundles
+contain the compiled gateway helper and Devin authentication PTY driver;
+neither contains credentials.
+
+Build only the standalone helper:
 
 ```bash
 bun run build:helper
