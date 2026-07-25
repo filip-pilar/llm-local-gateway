@@ -1,0 +1,10 @@
+.build/
+dist/
+node_modules/
+.DS_Store
+.env
+.env.*
+*.log
+coverage/
+.codex/
+test/.captures/

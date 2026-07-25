@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "llm-gateway",
+      "dependencies": {
+        "windsurf-api": "github:dwgx/WindsurfAPI#81370f553718153bcd52297251cc565562d85645",
+      },
+    },
+  },
+  "packages": {
+    "windsurf-api": ["windsurf-api@github:dwgx/WindsurfAPI#81370f5", { "bin": { "windsurfapi": "src/index.js" } }, "dwgx-WindsurfAPI-81370f5"],
+  }
+}
