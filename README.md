@@ -161,3 +161,7 @@ bun run build:helper
 
 See [architecture](docs/architecture.md) and
 [consolidation notes](docs/consolidation.md).
+
+## License
+
+[MIT](LICENSE) © 2026 Filip Pilar.

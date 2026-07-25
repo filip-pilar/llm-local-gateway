@@ -66,8 +66,10 @@ After the transport cutover, bounded live bridge checks also passed for:
 - one forced synthetic Anthropic tool call with `input_json_delta`.
 
 Only fixed synthetic prompts and schemas were sent. All proof response bodies
-were suppressed. A broader child-harness run was intentionally not used because
-it could send repository-derived prompt material to xAI.
+were suppressed. After explicit approval for quota-consuming verification, the
+real Codex and Claude child-agent harnesses also passed against `grok-4.5`,
+including streaming, a local Codex `exec` round trip, child identity continuity,
+lifecycle completion, and routing-map cleanup.
 
 ## Implemented seam
 
