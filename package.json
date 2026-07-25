@@ -6,7 +6,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/filip-pilar/llm-getaway.git"
+    "url": "git+https://github.com/filip-pilar/llm-gateway.git"
   },
   "type": "module",
   "packageManager": "bun@1.3.5",
