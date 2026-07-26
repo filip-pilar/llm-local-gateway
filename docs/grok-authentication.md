@@ -42,7 +42,7 @@ Credential-opaque discovery:
 
 ```bash
 grok --no-auto-update models
-npm run spike:grok-auth -- --json
+bun run spike:grok-auth -- --json
 ```
 
 returned only `grok-4.5` for the linked account. One bounded headless request

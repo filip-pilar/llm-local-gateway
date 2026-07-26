@@ -18,6 +18,14 @@ async function waitForInternalServer(getActiveServer, port, timeoutMs = 15_000) 
   throw new Error(`Internal Devin transport did not start on port ${port}`);
 }
 
+async function loadWindsurfServer() {
+  const { getActiveServer } = await import(
+    "windsurf-api/src/server-registry.js"
+  );
+  await import("windsurf-api/src/index.js");
+  return getActiveServer;
+}
+
 export async function startDevinTransport({
   port,
   token,
@@ -25,11 +33,13 @@ export async function startDevinTransport({
   defaultModel,
   host = "127.0.0.1",
   log = () => {},
+  reconcile = reconcileUpstreamAccounts,
+  loadUpstream = loadWindsurfServer,
 }) {
   if (host !== "127.0.0.1") {
     throw new Error("Internal Devin transport must bind to 127.0.0.1");
   }
-  const accountState = reconcileUpstreamAccounts(dataDir, token);
+  const accountState = reconcile(dataDir, token);
   if (accountState.removed > 0) {
     log(`removed ${accountState.removed} stale upstream account record(s)`);
   }
@@ -49,9 +59,6 @@ export async function startDevinTransport({
   });
 
   log(`starting internal transport on ${host}:${port}`);
-  const { getActiveServer } = await import(
-    "windsurf-api/src/server-registry.js"
-  );
-  await import("windsurf-api/src/index.js");
+  const getActiveServer = await loadUpstream();
   return waitForInternalServer(getActiveServer, port);
 }

@@ -100,17 +100,17 @@ diagnosis.
 ## Source layout
 
 ```text
-bin/llm-local-gateway.mjs             CLI entry point
-src/core/providers.mjs          model ownership
-src/core/*credentials.mjs       provider credential readers
-src/http/openai-endpoint.mjs    public protocols and router
-src/service/bridge.mjs          independent provider lifecycle
-src/service/diagnostics.mjs     provider and endpoint status
-src/transport/devin.mjs         Devin/Windsurf startup
-src/transport/grok.mjs          Grok OAuth transport
-src/transport/anthropic-*.mjs   Grok Anthropic adapter
-macos/LLMLocalGatewayApp             unified native menu-bar controller
-bin/build-macos-app.mjs         signed local app packaging
+bin/llm-local-gateway.mjs           CLI entry point
+src/core/providers.mjs              model ownership
+src/core/*credentials.mjs           provider credential readers
+src/http/openai-endpoint.mjs        public protocols and router
+src/service/bridge.mjs              independent provider lifecycle
+src/service/diagnostics.mjs         provider and endpoint status
+src/transport/devin.mjs             Devin/Windsurf startup
+src/transport/grok.mjs              Grok OAuth transport
+src/transport/anthropic-*.mjs       Grok Anthropic adapter
+macos/LLMLocalGatewayApp            native menu-bar controller
+bin/build-macos-app.mjs             signed local app packaging
 ```
 
 The native app bundles the same compiled helper, supervises it with a parent

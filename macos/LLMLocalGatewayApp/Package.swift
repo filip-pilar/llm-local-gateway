@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "LLMLocalGatewayApp",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS(.v26)],
     products: [
         .executable(name: "LLMLocalGatewayApp", targets: ["LLMLocalGatewayApp"]),
     ],

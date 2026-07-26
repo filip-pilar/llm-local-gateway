@@ -188,6 +188,33 @@ test("status reports each missing official provider CLI", async () => {
   assert.match(find(report, "Official Grok CLI").message, /not found/);
 });
 
+test("status discovers and authenticates an executable Devin CLI", async () => {
+  const value = fixture();
+  const devinCLI = join(value.home, "devin");
+  writeFileSync(
+    devinCLI,
+    [
+      "#!/bin/sh",
+      'if [ "$1" = "--version" ]; then',
+      "  echo 'devin 1.2.3'",
+      'elif [ "$1" = "auth" ] && [ "$2" = "status" ]; then',
+      "  echo 'Logged in'",
+      "else",
+      "  exit 2",
+      "fi",
+    ].join("\n"),
+    { mode: 0o700 },
+  );
+  chmodSync(devinCLI, 0o700);
+
+  const report = await runDiagnostics({
+    env: { ...value.env, DEVIN_CLI: devinCLI, PATH: "" },
+    cliChecks: { grok: cliChecks.grok },
+  });
+  assert.equal(find(report, "Official Devin CLI").status, "pass");
+  assert.match(find(report, "Official Devin CLI").message, /devin 1\.2\.3/);
+});
+
 test("status reports failed Grok model discovery without exposing command output", async () => {
   const value = fixture();
   const report = await runDiagnostics({

@@ -16,15 +16,18 @@
     "build:helper": "node bin/build-helper.mjs",
     "build:macos": "node bin/build-macos-app.mjs",
     "build:macos:debug": "node bin/build-macos-app.mjs --debug",
+    "check": "node bin/check.mjs",
     "status": "node bin/llm-local-gateway.mjs status",
     "status:live": "node bin/llm-local-gateway.mjs status --live",
     "smoke": "node bin/smoke.mjs",
     "spike:grok-auth": "node bin/grok-auth-spike.mjs",
     "test": "node --test test/*.test.mjs",
+    "test:contracts": "node --test test/contracts.test.mjs",
+    "test:coverage": "node --test --experimental-test-coverage test/*.test.mjs",
     "test:codex-comparison": "node test/support/run-codex-three-way.mjs",
     "test:live-providers": "node test/support/run-live-provider-conformance.mjs",
     "test:live-subagents": "node test/support/run-live-subagent-compat.mjs",
-    "test:native": "CLANG_MODULE_CACHE_PATH=\"$PWD/.build/swift-module-cache\" SWIFTPM_MODULECACHE_OVERRIDE=\"$PWD/.build/swift-module-cache\" swift test --disable-sandbox --package-path macos/LLMLocalGatewayApp --scratch-path .build/macos-swift-tests"
+    "test:native": "node bin/test-native.mjs"
   },
   "bin": {
     "llm-local-gateway": "bin/llm-local-gateway.mjs"

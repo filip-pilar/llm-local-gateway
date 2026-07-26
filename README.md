@@ -27,9 +27,10 @@ models.
 ## Requirements
 
 - Node.js 20 or newer
-- Bun 1.3.x to install the pinned `windsurf-api` dependency or build a helper
+- Bun 1.3.5 to install the pinned `windsurf-api` dependency or build a helper
 - Official Devin CLI authenticated with `devin auth login`
 - Official Grok CLI authenticated with `grok login`
+- macOS 26 and Swift 6.2 to build the native menu-bar app
 
 The gateway does not own either login. Grok refresh remains CLI-owned; Devin
 continues to use the official credential and its existing Windsurf transport.
@@ -37,7 +38,7 @@ continues to use the official credential and its existing Windsurf transport.
 ## Install and run
 
 ```bash
-bun install
+bun install --frozen-lockfile
 bun run llm-local-gateway -- serve
 ```
 
@@ -118,8 +119,19 @@ directory does not, the existing directory is reused automatically.
 ## Tests
 
 ```bash
-npm test
-npm run test:native
+bun run check
+```
+
+`check` syntax-checks every JavaScript module, runs the complete non-live Node
+suite, and runs the Swift suite on macOS. Swift caches are keyed by the checkout
+path, so moving or renaming the repository does not reuse incompatible
+precompiled modules. Narrower commands are also available:
+
+```bash
+bun run test
+bun run test:contracts
+bun run test:native
+bun run test:coverage
 ```
 
 The default suite is non-live: it uses loopback fixtures and mocked upstreams,
@@ -130,12 +142,12 @@ provider and child-agent harnesses are separately gated by explicit
 ```bash
 LLM_LOCAL_GATEWAY_LIVE_CONFORMANCE=1 \
   LLM_LOCAL_GATEWAY_LIVE_MODELS=swe-1-6-slow,grok-4.5 \
-  npm run test:live-providers
+  bun run test:live-providers
 
 LLM_LOCAL_GATEWAY_LIVE_COMPAT=1 \
   LLM_LOCAL_GATEWAY_LIVE_MODEL=swe-1-6-slow \
   LLM_LOCAL_GATEWAY_LIVE_CODEX_EXEC=1 \
-  npm run test:live-subagents
+  bun run test:live-subagents
 ```
 
 These commands consume provider quota. `swe-1-7-lightning` also requires that
@@ -151,8 +163,8 @@ an explicit bounded live-verification action.
 Build signed local app bundles:
 
 ```bash
-npm run build:macos
-npm run build:macos:debug
+bun run build:macos
+bun run build:macos:debug
 ```
 
 The release bundle is written to `dist/LLM Local Gateway.app`. The debug bundle

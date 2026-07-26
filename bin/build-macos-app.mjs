@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { swiftCachePaths } from "./swift-cache-paths.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageRoot = join(root, "macos", "LLMLocalGatewayApp");
@@ -21,13 +22,15 @@ const app = join(
 const contents = join(app, "Contents");
 const macos = join(contents, "MacOS");
 const resources = join(contents, "Resources");
-const scratch = join(root, ".build", `macos-swift-${configuration}`);
+const { moduleCache, scratch } = swiftCachePaths(
+  root,
+  `macos-swift-${configuration}`,
+);
 const helper = join(root, ".build", "macos", "llm-local-gateway-helper");
 const authDriver = join(root, ".build", "macos", "devin-auth-pty");
 const architecture = process.arch === "arm64" ? "arm64" : "x86_64";
 
 function run(command, args, options = {}) {
-  const moduleCache = join(root, ".build", "swift-module-cache");
   mkdirSync(moduleCache, { recursive: true });
   const result = spawnSync(command, args, {
     cwd: root,
