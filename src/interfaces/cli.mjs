@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { gatewayEnvironmentValue } from "../core/environment.mjs";
 import {
   formatDiagnosticReport,
   runDiagnostics,
@@ -7,7 +8,7 @@ import {
 import { runBridgeProcess } from "../service/bridge.mjs";
 import { runDirectSmoke } from "../service/smoke.mjs";
 
-const usage = `Usage: llm-gateway <command> [options]
+const usage = `Usage: llm-local-gateway <command> [options]
 
 Commands:
   serve                    Run the loopback OpenAI and Claude-compatible gateway
@@ -25,15 +26,21 @@ function parse(options, args) {
 }
 
 function applyCommonEnvironment(values, env = process.env) {
-  if (values["data-dir"]) env.LLM_GATEWAY_DATA_DIR = resolve(values["data-dir"]);
+  if (values["data-dir"]) {
+    env.LLM_LOCAL_GATEWAY_DATA_DIR = resolve(values["data-dir"]);
+  }
   if (values["devin-credentials"]) {
     env.DEVIN_CREDENTIALS_FILE = resolve(values["devin-credentials"]);
   }
   if (values["grok-home"]) env.GROK_HOME = resolve(values["grok-home"]);
-  if (values.port) env.LLM_GATEWAY_PORT = values.port;
-  if (values["devin-port"]) env.LLM_GATEWAY_DEVIN_PORT = values["devin-port"];
-  if (values["grok-port"]) env.LLM_GATEWAY_GROK_PORT = values["grok-port"];
-  if (values.model) env.LLM_GATEWAY_MODEL = values.model;
+  if (values.port) env.LLM_LOCAL_GATEWAY_PORT = values.port;
+  if (values["devin-port"]) {
+    env.LLM_LOCAL_GATEWAY_DEVIN_PORT = values["devin-port"];
+  }
+  if (values["grok-port"]) {
+    env.LLM_LOCAL_GATEWAY_GROK_PORT = values["grok-port"];
+  }
+  if (values.model) env.LLM_LOCAL_GATEWAY_MODEL = values.model;
   return env;
 }
 
@@ -97,11 +104,16 @@ export async function runCli(argv = process.argv.slice(2)) {
       if (positionals.length) throw new Error(`Unexpected argument: ${positionals[0]}`);
       applyCommonEnvironment(values);
       const result = await runDirectSmoke({
-        port: Number(values.port ?? process.env.LLM_GATEWAY_PORT ?? 4317),
-        model: values.model ?? process.env.LLM_GATEWAY_MODEL ?? "swe-1-6-slow",
+        port: Number(
+          values.port ?? gatewayEnvironmentValue(process.env, "PORT") ?? 4317,
+        ),
+        model:
+          values.model ??
+          gatewayEnvironmentValue(process.env, "MODEL") ??
+          "swe-1-6-slow",
         timeoutMs: Number(
           values["timeout-ms"] ??
-          process.env.LLM_GATEWAY_TIMEOUT_MS ??
+          gatewayEnvironmentValue(process.env, "TIMEOUT_MS") ??
           300_000
         ),
         protocol: values.protocol ?? "openai",

@@ -20,7 +20,7 @@ const { values } = parseArgs({
   },
   strict: true,
 });
-const output = resolve(values.output || join(root, "dist", "llm-gateway-helper"));
+const output = resolve(values.output || join(root, "dist", "llm-local-gateway-helper"));
 const target = values.target || "bun-darwin-arm64";
 const buildRoot = join(root, ".build", "helper");
 const upstreamRoot = join(buildRoot, "node_modules", "windsurf-api");
@@ -32,7 +32,10 @@ rmSync(buildRoot, { recursive: true, force: true });
 mkdirSync(join(buildRoot, "bin"), { recursive: true });
 mkdirSync(dirname(upstreamRoot), { recursive: true });
 cpSync(join(root, "src"), join(buildRoot, "src"), { recursive: true });
-cpSync(join(root, "bin", "llm-gateway.mjs"), join(buildRoot, "bin", "llm-gateway.mjs"));
+cpSync(
+  join(root, "bin", "llm-local-gateway.mjs"),
+  join(buildRoot, "bin", "llm-local-gateway.mjs"),
+);
 cpSync(join(root, "node_modules", "windsurf-api"), upstreamRoot, { recursive: true });
 
 // Bun's compiled filesystem cannot satisfy the upstream module's runtime JSON
@@ -63,7 +66,7 @@ const result = spawnSync(
   "bun",
   [
     "build",
-    join(buildRoot, "bin", "llm-gateway.mjs"),
+    join(buildRoot, "bin", "llm-local-gateway.mjs"),
     "--compile",
     `--target=${target}`,
     `--outfile=${output}`,

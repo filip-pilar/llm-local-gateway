@@ -6,19 +6,19 @@ import { resolve } from "node:path";
 import { providerForModel, supportedModels } from "../../src/core/providers.mjs";
 import { startBridge } from "../../src/service/bridge.mjs";
 
-if (process.env.LLM_GATEWAY_LIVE_CONFORMANCE !== "1") {
+if (process.env.LLM_LOCAL_GATEWAY_LIVE_CONFORMANCE !== "1") {
   throw new Error(
-    "Set LLM_GATEWAY_LIVE_CONFORMANCE=1 to run quota-consuming provider probes",
+    "Set LLM_LOCAL_GATEWAY_LIVE_CONFORMANCE=1 to run quota-consuming provider probes",
   );
 }
 
-const publicPort = Number(process.env.LLM_GATEWAY_LIVE_PORT ?? 4517);
+const publicPort = Number(process.env.LLM_LOCAL_GATEWAY_LIVE_PORT ?? 4517);
 assert.ok(
   Number.isInteger(publicPort) && publicPort > 0 && publicPort <= 65533,
-  "LLM_GATEWAY_LIVE_PORT must leave room for two internal ports",
+  "LLM_LOCAL_GATEWAY_LIVE_PORT must leave room for two internal ports",
 );
 const requestedModels = (
-  process.env.LLM_GATEWAY_LIVE_MODELS ?? supportedModels.join(",")
+  process.env.LLM_LOCAL_GATEWAY_LIVE_MODELS ?? supportedModels.join(",")
 )
   .split(",")
   .map((value) => value.trim())
@@ -29,16 +29,16 @@ assert.ok(
   `Unsupported live model list: ${requestedModels.join(", ")}`,
 );
 
-const root = await mkdtemp(resolve(tmpdir(), "llm-gateway-live-conformance-"));
+const root = await mkdtemp(resolve(tmpdir(), "llm-local-gateway-live-conformance-"));
 let bridge;
 try {
   bridge = await startBridge({
     env: {
       ...process.env,
-      LLM_GATEWAY_PORT: String(publicPort),
-      LLM_GATEWAY_DEVIN_PORT: String(publicPort + 1),
-      LLM_GATEWAY_GROK_PORT: String(publicPort + 2),
-      LLM_GATEWAY_DATA_DIR: resolve(root, "gateway-data"),
+      LLM_LOCAL_GATEWAY_PORT: String(publicPort),
+      LLM_LOCAL_GATEWAY_DEVIN_PORT: String(publicPort + 1),
+      LLM_LOCAL_GATEWAY_GROK_PORT: String(publicPort + 2),
+      LLM_LOCAL_GATEWAY_DATA_DIR: resolve(root, "gateway-data"),
     },
     log: () => {},
   });

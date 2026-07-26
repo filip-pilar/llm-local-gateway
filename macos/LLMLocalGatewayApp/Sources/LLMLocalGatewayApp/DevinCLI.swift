@@ -78,7 +78,7 @@ struct DevinCLI: Sendable {
                 ? "`devin auth logout` timed out after 30 seconds."
                 : result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             throw NSError(
-                domain: "LLMGatewayApp",
+                domain: "LLMLocalGatewayApp",
                 code: Int(result.status),
                 userInfo: [NSLocalizedDescriptionKey: detail]
             )

@@ -4,7 +4,10 @@ import {
   providerForModel,
   supportedModels,
 } from "../core/providers.mjs";
-import { readinessPath } from "../core/readiness.mjs";
+import {
+  legacyReadinessPath,
+  readinessPath,
+} from "../core/readiness.mjs";
 import {
   createResponseProbe,
   observeRequest,
@@ -14,7 +17,8 @@ import { prepareCodexChildRequest } from "./codex-child-compat.mjs";
 
 const MAX_RESPONSES_BODY_BYTES = 10 * 1024 * 1024;
 const MAX_JSON_DEPTH = 100;
-const BRIDGE_IDENTITY_HEADER = "x-llm-gateway";
+const BRIDGE_IDENTITY_HEADER = "x-llm-local-gateway";
+const LEGACY_BRIDGE_IDENTITY_HEADER = "x-llm-gateway";
 const LOOPBACK_HOST = "127.0.0.1";
 export const openAIBasePath = "/openai/v1";
 export const claudeBasePath = "/claude";
@@ -237,7 +241,7 @@ function providerUnavailable(response, protocol, provider) {
       type: "error",
       error: {
         type: "api_error",
-        message: `${provider} is not ready. Run \`llm-gateway status\` for details.`,
+        message: `${provider} is not ready. Run \`llm-local-gateway status\` for details.`,
       },
     });
     return;
@@ -245,7 +249,7 @@ function providerUnavailable(response, protocol, provider) {
   sendJson(response, 503, {
     error: {
       type: "provider_unavailable",
-      message: `${provider} is not ready. Run \`llm-gateway status\` for details.`,
+      message: `${provider} is not ready. Run \`llm-local-gateway status\` for details.`,
       provider,
     },
   });
@@ -543,6 +547,7 @@ export function createOpenAIEndpoint({
 
   return createServer((request, response) => {
     response.setHeader(BRIDGE_IDENTITY_HEADER, "1");
+    response.setHeader(LEGACY_BRIDGE_IDENTITY_HEADER, "1");
     let url;
     try {
       url = new URL(request.url || "/", "http://127.0.0.1");
@@ -553,7 +558,10 @@ export function createOpenAIEndpoint({
       return;
     }
 
-    if (url.pathname === readinessPath) {
+    if (
+      url.pathname === readinessPath ||
+      url.pathname === legacyReadinessPath
+    ) {
       if (request.method !== "GET") {
         sendJson(response, 405, {
           error: { type: "method_not_allowed", message: "Only GET is allowed for readiness." },

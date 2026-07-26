@@ -9,10 +9,10 @@ export async function runDirectSmoke({
   protocol = "openai",
 } = {}) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`Invalid LLM_GATEWAY_PORT: ${port}`);
+    throw new Error(`Invalid LLM_LOCAL_GATEWAY_PORT: ${port}`);
   }
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1) {
-    throw new Error(`Invalid LLM_GATEWAY_TIMEOUT_MS: ${timeoutMs}`);
+    throw new Error(`Invalid LLM_LOCAL_GATEWAY_TIMEOUT_MS: ${timeoutMs}`);
   }
   if (!supportedModels.includes(model)) {
     throw new Error(`Unsupported gateway model: ${model}`);
@@ -29,7 +29,10 @@ export async function runDirectSmoke({
   const provider = model.startsWith("swe-") ? "devin" : "grok";
   if (
     !challenge.ok ||
-    challenge.headers.get("x-llm-gateway") !== "1" ||
+    (
+      challenge.headers.get("x-llm-local-gateway") !== "1" &&
+      challenge.headers.get("x-llm-gateway") !== "1"
+    ) ||
     readiness?.providers?.[provider]?.ready !== true
   ) {
     throw new Error(`The loopback gateway does not report ${provider} ready`);

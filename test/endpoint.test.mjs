@@ -685,11 +685,12 @@ test("serves model discovery and readiness without authentication", async () => 
   try {
     const models = await fetch(`http://127.0.0.1:${port}/v1/models`);
     assert.equal(models.status, 200);
+    assert.equal(models.headers.get("x-llm-local-gateway"), "1");
     assert.equal(models.headers.get("x-llm-gateway"), "1");
 
-    const readiness = await fetch(`http://127.0.0.1:${port}/__llm_gateway/readiness`);
+    const readiness = await fetch(`http://127.0.0.1:${port}/__llm_local_gateway/readiness`);
     assert.equal(readiness.status, 200);
-    assert.equal(readiness.headers.get("x-llm-gateway"), "1");
+    assert.equal(readiness.headers.get("x-llm-local-gateway"), "1");
     assert.deepEqual(await readiness.json(), {
       ready: true,
       default_model: "swe-1-6-slow",
@@ -706,6 +707,13 @@ test("serves model discovery and readiness without authentication", async () => 
         },
       },
     });
+
+    const legacyReadiness = await fetch(
+      `http://127.0.0.1:${port}/__llm_gateway/readiness`,
+    );
+    assert.equal(legacyReadiness.status, 200);
+    assert.equal(legacyReadiness.headers.get("x-llm-gateway"), "1");
+    assert.equal((await legacyReadiness.json()).ready, true);
   } finally {
     await close(endpoint);
   }
@@ -720,14 +728,14 @@ test("reports not ready after the internal transport stops", async () => {
   });
   const port = await listen(endpoint);
   try {
-    const ready = await fetch(`http://127.0.0.1:${port}/__llm_gateway/readiness`);
+    const ready = await fetch(`http://127.0.0.1:${port}/__llm_local_gateway/readiness`);
     assert.equal(ready.status, 200);
     assert.equal((await ready.json()).ready, true);
 
     await close(upstream);
-    const unavailable = await fetch(`http://127.0.0.1:${port}/__llm_gateway/readiness`);
+    const unavailable = await fetch(`http://127.0.0.1:${port}/__llm_local_gateway/readiness`);
     assert.equal(unavailable.status, 503);
-    assert.equal(unavailable.headers.get("x-llm-gateway"), "1");
+    assert.equal(unavailable.headers.get("x-llm-local-gateway"), "1");
     assert.equal((await unavailable.json()).ready, false);
   } finally {
     await close(endpoint);
@@ -755,7 +763,7 @@ test("keeps provider readiness and failures independent", async () => {
   const port = await listen(endpoint);
   try {
     const readiness = await fetch(
-      `http://127.0.0.1:${port}/__llm_gateway/readiness`,
+      `http://127.0.0.1:${port}/__llm_local_gateway/readiness`,
     );
     assert.equal(readiness.status, 200);
     const status = await readiness.json();
@@ -771,7 +779,7 @@ test("keeps provider readiness and failures independent", async () => {
     assert.deepEqual(await devin.json(), {
       error: {
         type: "provider_unavailable",
-        message: "devin is not ready. Run `llm-gateway status` for details.",
+        message: "devin is not ready. Run `llm-local-gateway status` for details.",
         provider: "devin",
       },
     });

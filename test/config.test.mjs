@@ -47,7 +47,7 @@ test("parses the official Devin credential key without exposing unrelated values
 });
 
 test("Devin credential reads repair permissions and reject symbolic links", () => {
-  const dir = mkdtempSync(join(tmpdir(), "llm-gateway-devin-credential-"));
+  const dir = mkdtempSync(join(tmpdir(), "llm-local-gateway-devin-credential-"));
   const credentials = join(dir, "credentials.toml");
   const link = join(dir, "linked-credentials.toml");
   writeFileSync(credentials, 'windsurf_api_key = "secret-token"\n', {

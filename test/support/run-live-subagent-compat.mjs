@@ -8,22 +8,22 @@ import { resolve } from "node:path";
 import { supportedModels } from "../../src/core/providers.mjs";
 import { startBridge } from "../../src/service/bridge.mjs";
 
-if (process.env.LLM_GATEWAY_LIVE_COMPAT !== "1") {
-  throw new Error("Set LLM_GATEWAY_LIVE_COMPAT=1 to run bounded live compatibility probes");
+if (process.env.LLM_LOCAL_GATEWAY_LIVE_COMPAT !== "1") {
+  throw new Error("Set LLM_LOCAL_GATEWAY_LIVE_COMPAT=1 to run bounded live compatibility probes");
 }
 
-const bridgeBase = process.env.LLM_GATEWAY_LIVE_BASE ?? "http://127.0.0.1:4317";
+const bridgeBase = process.env.LLM_LOCAL_GATEWAY_LIVE_BASE ?? "http://127.0.0.1:4317";
 const bridgeUrl = new URL(bridgeBase);
 assert.equal(bridgeUrl.hostname, "127.0.0.1", "live bridge must use loopback");
 const bridgePort = Number(bridgeUrl.port || "80");
 assert.ok(Number.isInteger(bridgePort) && bridgePort > 0, "live bridge requires an explicit loopback port");
-const model = process.env.LLM_GATEWAY_LIVE_MODEL ?? "grok-4.5";
+const model = process.env.LLM_LOCAL_GATEWAY_LIVE_MODEL ?? "grok-4.5";
 assert.ok(supportedModels.includes(model), `unsupported live gateway model: ${model}`);
-const repeats = Number(process.env.LLM_GATEWAY_LIVE_REPEATS ?? 3);
+const repeats = Number(process.env.LLM_LOCAL_GATEWAY_LIVE_REPEATS ?? 3);
 assert.ok(Number.isInteger(repeats) && repeats >= 1 && repeats <= 5, "repeat count must be between 1 and 5");
-const selectedHarnesses = new Set((process.env.LLM_GATEWAY_LIVE_HARNESSES ?? "codex,claude").split(",").map((value) => value.trim()));
+const selectedHarnesses = new Set((process.env.LLM_LOCAL_GATEWAY_LIVE_HARNESSES ?? "codex,claude").split(",").map((value) => value.trim()));
 assert.ok([...selectedHarnesses].every((value) => ["codex", "claude"].includes(value)), "harness selection must contain only codex and/or claude");
-const requireCodexExec = process.env.LLM_GATEWAY_LIVE_CODEX_EXEC === "1";
+const requireCodexExec = process.env.LLM_LOCAL_GATEWAY_LIVE_CODEX_EXEC === "1";
 
 const routerRoot = resolve(process.cwd(), process.env.HARNESS_MODEL_ROUTER_ROOT ?? "../harness-model-router");
 try {
@@ -34,7 +34,7 @@ try {
 const { defaultConfig, saveConfig } = await import(resolve(routerRoot, "dist/config.js"));
 const { createGateway } = await import(resolve(routerRoot, "dist/gateway.js"));
 const { installIntegration } = await import(resolve(routerRoot, "dist/lifecycle.js"));
-const root = await mkdtemp(resolve(tmpdir(), "llm-gateway-child-only-"));
+const root = await mkdtemp(resolve(tmpdir(), "llm-local-gateway-child-only-"));
 const bridgeRecords = [];
 const servers = [];
 let bridge;
@@ -43,11 +43,11 @@ try {
   bridge = await startBridge({
     env: {
       ...process.env,
-      LLM_GATEWAY_PORT: String(bridgePort),
-      LLM_GATEWAY_DEVIN_PORT: String(bridgePort + 1),
-      LLM_GATEWAY_GROK_PORT: String(bridgePort + 2),
-      LLM_GATEWAY_DATA_DIR: resolve(root, "gateway-data"),
-      LLM_GATEWAY_MODEL: model,
+      LLM_LOCAL_GATEWAY_PORT: String(bridgePort),
+      LLM_LOCAL_GATEWAY_DEVIN_PORT: String(bridgePort + 1),
+      LLM_LOCAL_GATEWAY_GROK_PORT: String(bridgePort + 2),
+      LLM_LOCAL_GATEWAY_DATA_DIR: resolve(root, "gateway-data"),
+      LLM_LOCAL_GATEWAY_MODEL: model,
     },
     boundaryObserver: (record) => bridgeRecords.push(record),
     log: () => {},
@@ -67,7 +67,7 @@ try {
     runs.push(run);
   }
   process.stdout.write(`${JSON.stringify({
-    topology: "mock-parent -> real-harness -> routed-child -> llm-gateway -> real-harness -> mock-parent",
+    topology: "mock-parent -> real-harness -> routed-child -> llm-local-gateway -> real-harness -> mock-parent",
     bridge: { base: bridgeBase, model },
     repeats,
     runs,

@@ -11,7 +11,10 @@ final class BridgeController: ObservableObject {
         "grok-4.5",
     ]
     nonisolated static let publicPort: Int = {
-        let value = ProcessInfo.processInfo.environment["LLM_GATEWAY_PORT"]
+        let environment = ProcessInfo.processInfo.environment
+        let value =
+            environment["LLM_LOCAL_GATEWAY_PORT"]
+            ?? environment["LLM_GATEWAY_PORT"]
         #if DEBUG
         return Int(value ?? "") ?? 4717
         #else
@@ -218,7 +221,7 @@ final class BridgeController: ObservableObject {
         ) else {
             recordFailure(
                 "Authentication helper is missing",
-                detail: "Rebuild or reinstall LLM Gateway."
+                detail: "Rebuild or reinstall LLM Local Gateway."
             )
             return
         }
@@ -305,7 +308,7 @@ final class BridgeController: ObservableObject {
         feedback = Feedback(
             kind: .failure,
             title: "Login cancelled",
-            detail: "No provider credentials were changed by LLM Gateway."
+            detail: "No provider credentials were changed by LLM Local Gateway."
         )
     }
 
@@ -384,7 +387,7 @@ final class BridgeController: ObservableObject {
         guard fstat(descriptor, &metadata) == 0,
               metadata.st_mode & S_IFMT == S_IFREG else {
             throw NSError(
-                domain: "LLMGatewayApp",
+                domain: "LLMLocalGatewayApp",
                 code: 1,
                 userInfo: [
                     NSLocalizedDescriptionKey:
@@ -408,7 +411,7 @@ final class BridgeController: ObservableObject {
         )
         guard values.isDirectory == true, values.isSymbolicLink != true else {
             throw NSError(
-                domain: "LLMGatewayApp",
+                domain: "LLMLocalGatewayApp",
                 code: 2,
                 userInfo: [
                     NSLocalizedDescriptionKey:
@@ -435,11 +438,11 @@ final class BridgeController: ObservableObject {
 
     nonisolated private static func installBundledHelper(paths: AppPaths) throws {
         guard let bundled = Bundle.main.url(
-            forResource: "llm-gateway-helper",
+            forResource: "llm-local-gateway-helper",
             withExtension: nil
         ) else {
             throw NSError(
-                domain: "LLMGatewayApp",
+                domain: "LLMLocalGatewayApp",
                 code: 2,
                 userInfo: [
                     NSLocalizedDescriptionKey: "Bundled gateway helper is missing",
@@ -451,7 +454,7 @@ final class BridgeController: ObservableObject {
         try ensurePrivateDirectory(paths.dataDirectory)
         try ensurePrivateDirectory(binDirectory)
         let temporary = binDirectory.appending(
-            path: ".llm-gateway-helper.\(UUID().uuidString).tmp"
+            path: ".llm-local-gateway-helper.\(UUID().uuidString).tmp"
         )
         try manager.copyItem(at: bundled, to: temporary)
         try manager.setAttributes(
@@ -501,7 +504,7 @@ final class BridgeController: ObservableObject {
         ]
         process.environment = {
             var environment = ProcessInfo.processInfo.environment
-            environment["LLM_GATEWAY_DATA_DIR"] = paths.dataDirectory.path
+            environment["LLM_LOCAL_GATEWAY_DATA_DIR"] = paths.dataDirectory.path
             environment["DEVIN_CREDENTIALS_FILE"] = paths.devinCredentials.path
             environment["GROK_HOME"] = paths.grokHome.path
             if let executable = grokCLI?.executable.path {
@@ -544,7 +547,7 @@ final class BridgeController: ObservableObject {
             try? await Task.sleep(for: .milliseconds(100))
         }
         throw NSError(
-            domain: "LLMGatewayApp",
+            domain: "LLMLocalGatewayApp",
             code: 3,
             userInfo: [
                 NSLocalizedDescriptionKey:
@@ -650,7 +653,7 @@ final class BridgeController: ObservableObject {
                                 in: .whitespacesAndNewlines
                             )
                             throw NSError(
-                                domain: "LLMGatewayApp",
+                                domain: "LLMLocalGatewayApp",
                                 code: Int(result.status),
                                 userInfo: [
                                     NSLocalizedDescriptionKey:
@@ -733,8 +736,8 @@ final class BridgeController: ObservableObject {
                     : "Launch at Login disabled",
                 detail:
                     launchAtLogin
-                    ? "LLM Gateway will start after you sign in to this Mac."
-                    : "You can still open LLM Gateway manually."
+                    ? "LLM Local Gateway will start after you sign in to this Mac."
+                    : "You can still open LLM Local Gateway manually."
             )
         } catch {
             launchAtLogin = SMAppService.mainApp.status == .enabled

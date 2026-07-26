@@ -16,8 +16,8 @@ const { defaultConfig, saveConfig } = await import(resolve(routerRoot, "dist/con
 const { createGateway } = await import(resolve(routerRoot, "dist/gateway.js"));
 const { installIntegration } = await import(resolve(routerRoot, "dist/lifecycle.js"));
 
-const codexPath = process.env.LLM_GATEWAY_CODEX_BIN ?? "codex";
-const root = await mkdtemp(resolve(tmpdir(), "llm-gateway-codex-comparison-"));
+const codexPath = process.env.LLM_LOCAL_GATEWAY_CODEX_BIN ?? "codex";
+const root = await mkdtemp(resolve(tmpdir(), "llm-local-gateway-codex-comparison-"));
 const servers = [];
 const version = execFileSync(codexPath, ["--version"], { encoding: "utf8" }).trim();
 const minorVersion = Number(/\b0\.(\d+)\./.exec(version)?.[1] ?? 999);
@@ -50,7 +50,7 @@ try {
     comparisons,
     attribution: compareToolBoundary(unrouted, routed),
   };
-  const rendered = process.env.LLM_GATEWAY_CODEX_SUMMARY === "1"
+  const rendered = process.env.LLM_LOCAL_GATEWAY_CODEX_SUMMARY === "1"
     ? {
         codex: output.codex,
         comparisons: comparisons.map((entry) => ({
@@ -214,7 +214,7 @@ async function runScenario({ name, routed, agentType, factor, customAgent }) {
   const parentRequestsOnly = parentState.requests.filter((capture) => !isChildCapture(capture, assignment));
   assert.ok(parentRequestsOnly.every((capture) => capture.body.model === parentModel), `${name}: parent model drifted`);
   if (routed) {
-    if (process.env.LLM_GATEWAY_ALLOW_ROUTE_FAILURE !== "1") {
+    if (process.env.LLM_LOCAL_GATEWAY_ALLOW_ROUTE_FAILURE !== "1") {
       assert.equal(firstChild.body.model, `capture-${parentModel}`);
       assert.equal(routeSucceeded, true);
       assert.equal(JSON.stringify(firstChild.body).includes(`router-${agentType}`), false);

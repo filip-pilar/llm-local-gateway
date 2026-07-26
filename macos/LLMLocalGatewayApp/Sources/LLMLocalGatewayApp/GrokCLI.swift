@@ -78,7 +78,7 @@ struct GrokCLI: Sendable {
                 ? "`grok logout` timed out after 30 seconds."
                 : "`grok logout` failed without exposing command output."
             throw NSError(
-                domain: "LLMGatewayApp",
+                domain: "LLMLocalGatewayApp",
                 code: Int(result.status),
                 userInfo: [NSLocalizedDescriptionKey: detail]
             )

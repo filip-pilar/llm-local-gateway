@@ -1,11 +1,15 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+  defaultGatewayDataDirectory,
+  gatewayEnvironmentValue,
+} from "./environment.mjs";
 
 export function resolveBridgePaths(env = process.env) {
   const home = resolve(env.HOME || homedir());
   const bridgeDataDir = resolve(
-    env.LLM_GATEWAY_DATA_DIR ||
-      join(home, ".local", "share", "llm-gateway"),
+    gatewayEnvironmentValue(env, "DATA_DIR") ||
+      defaultGatewayDataDirectory(home),
   );
   const grokHome = resolve(env.GROK_HOME || join(home, ".grok"));
   const devinCredentialsPath = resolve(

@@ -4,6 +4,10 @@ import { lstat, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseTomlString } from "../core/devin-credentials.mjs";
+import {
+  defaultGatewayDataDirectory,
+  gatewayEnvironmentValue,
+} from "../core/environment.mjs";
 import { providerModels, supportedModels } from "../core/providers.mjs";
 import { readinessPath } from "../core/readiness.mjs";
 import { probeOfficialGrokCLI } from "../spike/grok-auth.mjs";
@@ -22,13 +26,13 @@ function canonicalPort(value, name) {
 export function resolveDiagnosticPaths({ env = process.env } = {}) {
   const home = resolve(env.HOME || homedir());
   const dataDir = resolve(
-    env.LLM_GATEWAY_DATA_DIR ||
-      join(home, ".local", "share", "llm-gateway"),
+    gatewayEnvironmentValue(env, "DATA_DIR") ||
+      defaultGatewayDataDirectory(home),
   );
   const grokHome = resolve(env.GROK_HOME || join(home, ".grok"));
   const port = canonicalPort(
-    env.LLM_GATEWAY_PORT ?? "4317",
-    "LLM_GATEWAY_PORT",
+    gatewayEnvironmentValue(env, "PORT") ?? "4317",
+    "LLM_LOCAL_GATEWAY_PORT",
   );
   return {
     home,
@@ -42,7 +46,7 @@ export function resolveDiagnosticPaths({ env = process.env } = {}) {
     grokCredentials: join(grokHome, "auth.json"),
     serviceLog: join(dataDir, "gateway.log"),
     modelsUrl:
-      env.LLM_GATEWAY_MODELS_URL ||
+      gatewayEnvironmentValue(env, "MODELS_URL") ||
       `http://127.0.0.1:${port}/openai/v1/models`,
   };
 }
@@ -265,11 +269,17 @@ async function checkEndpoint({ live, paths, fetchImpl }) {
     });
     const readinessBody = await challenge.json().catch(() => null);
     if (
-      challenge.headers.get("x-llm-gateway") !== "1" ||
+      (
+        challenge.headers.get("x-llm-local-gateway") !== "1" &&
+        challenge.headers.get("x-llm-gateway") !== "1"
+      ) ||
       typeof readinessBody?.ready !== "boolean"
     ) {
       return [
-        fail("Local endpoint", "loopback listener did not identify itself as llm-gateway"),
+        fail(
+          "Local endpoint",
+          "loopback listener did not identify itself as llm-local-gateway",
+        ),
         skip("Local Devin transport", "endpoint identity was not verified"),
         skip("Local Grok transport", "endpoint identity was not verified"),
       ];

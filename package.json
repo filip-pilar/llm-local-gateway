@@ -1,33 +1,33 @@
 {
-  "name": "llm-gateway",
+  "name": "llm-local-gateway",
   "version": "0.1.0",
   "description": "Route Devin and Grok CLI subscriptions through one loopback OpenAI- and Anthropic-compatible gateway.",
   "private": true,
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/filip-pilar/llm-gateway.git"
+    "url": "git+https://github.com/filip-pilar/llm-local-gateway.git"
   },
   "type": "module",
   "packageManager": "bun@1.3.5",
   "scripts": {
-    "start": "node bin/llm-gateway.mjs serve",
-    "llm-gateway": "node bin/llm-gateway.mjs",
+    "start": "node bin/llm-local-gateway.mjs serve",
+    "llm-local-gateway": "node bin/llm-local-gateway.mjs",
     "build:helper": "node bin/build-helper.mjs",
     "build:macos": "node bin/build-macos-app.mjs",
     "build:macos:debug": "node bin/build-macos-app.mjs --debug",
-    "status": "node bin/llm-gateway.mjs status",
-    "status:live": "node bin/llm-gateway.mjs status --live",
+    "status": "node bin/llm-local-gateway.mjs status",
+    "status:live": "node bin/llm-local-gateway.mjs status --live",
     "smoke": "node bin/smoke.mjs",
     "spike:grok-auth": "node bin/grok-auth-spike.mjs",
     "test": "node --test test/*.test.mjs",
     "test:codex-comparison": "node test/support/run-codex-three-way.mjs",
     "test:live-providers": "node test/support/run-live-provider-conformance.mjs",
     "test:live-subagents": "node test/support/run-live-subagent-compat.mjs",
-    "test:native": "CLANG_MODULE_CACHE_PATH=\"$PWD/.build/swift-module-cache\" SWIFTPM_MODULECACHE_OVERRIDE=\"$PWD/.build/swift-module-cache\" swift test --disable-sandbox --package-path macos/LLMGatewayApp --scratch-path .build/macos-swift-tests"
+    "test:native": "CLANG_MODULE_CACHE_PATH=\"$PWD/.build/swift-module-cache\" SWIFTPM_MODULECACHE_OVERRIDE=\"$PWD/.build/swift-module-cache\" swift test --disable-sandbox --package-path macos/LLMLocalGatewayApp --scratch-path .build/macos-swift-tests"
   },
   "bin": {
-    "llm-gateway": "bin/llm-gateway.mjs"
+    "llm-local-gateway": "bin/llm-local-gateway.mjs"
   },
   "dependencies": {
     "windsurf-api": "github:dwgx/WindsurfAPI#81370f553718153bcd52297251cc565562d85645"

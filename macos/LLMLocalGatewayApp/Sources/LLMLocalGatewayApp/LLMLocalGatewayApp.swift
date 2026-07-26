@@ -1,18 +1,18 @@
 import SwiftUI
 
 @main
-struct LLMGatewayMenuApp: App {
+struct LLMLocalGatewayMenuApp: App {
     @StateObject private var controller = BridgeController()
 
     var body: some Scene {
         #if DEBUG
-        Window("LLM Gateway UI Test", id: "ui-test") {
+        Window("LLM Local Gateway UI Test", id: "ui-test") {
             GatewayPanel(controller: controller)
         }
         .windowResizability(.contentSize)
         #else
         MenuBarExtra(
-            "LLM Gateway",
+            "LLM Local Gateway",
             systemImage: controller.endpointVerified
                 ? "point.3.connected.trianglepath.dotted"
                 : "point.3.filled.connected.trianglepath.dotted"
@@ -86,7 +86,7 @@ private struct GatewayPanel: View {
             .frame(width: 38, height: 38)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("LLM Gateway")
+                Text("LLM Local Gateway")
                     .font(.headline)
                 Text(controller.operation?.label ?? controller.state.label)
                     .font(.caption)

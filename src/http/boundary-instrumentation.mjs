@@ -8,6 +8,7 @@ const VALUE_HEADERS = new Set([
   "content-encoding",
   "content-type",
   "x-llm-gateway",
+  "x-llm-local-gateway",
 ]);
 const SECRET_HEADERS = new Set([
   "authorization",

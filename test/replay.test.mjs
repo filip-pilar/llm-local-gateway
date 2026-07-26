@@ -50,9 +50,9 @@ test("normalizes Anthropic and OpenAI error types for replay expectations", () =
 });
 
 test("replays an external harness capture byte-for-byte through the public endpoint", {
-  skip: !process.env.LLM_GATEWAY_REPLAY_CAPTURE,
+  skip: !process.env.LLM_LOCAL_GATEWAY_REPLAY_CAPTURE,
 }, async () => {
-  const capture = await readReplayCapture(process.env.LLM_GATEWAY_REPLAY_CAPTURE);
+  const capture = await readReplayCapture(process.env.LLM_LOCAL_GATEWAY_REPLAY_CAPTURE);
   const received = [];
   const upstream = createServer((request, response) => {
     const chunks = [];
@@ -90,14 +90,14 @@ test("replays an external harness capture byte-for-byte through the public endpo
 });
 
 test("runs bounded live Claude replay ablations only when explicitly enabled", {
-  skip: process.env.LLM_GATEWAY_LIVE_REPLAY !== "1" || !process.env.LLM_GATEWAY_REPLAY_CAPTURE,
+  skip: process.env.LLM_LOCAL_GATEWAY_LIVE_REPLAY !== "1" || !process.env.LLM_LOCAL_GATEWAY_REPLAY_CAPTURE,
   timeout: 120_000,
 }, async () => {
-  const capture = await readReplayCapture(process.env.LLM_GATEWAY_REPLAY_CAPTURE);
-  const baseUrl = process.env.LLM_GATEWAY_REPLAY_BASE_URL;
-  if (!baseUrl) throw new Error("LLM_GATEWAY_REPLAY_BASE_URL is required for live replay");
+  const capture = await readReplayCapture(process.env.LLM_LOCAL_GATEWAY_REPLAY_CAPTURE);
+  const baseUrl = process.env.LLM_LOCAL_GATEWAY_REPLAY_BASE_URL;
+  if (!baseUrl) throw new Error("LLM_LOCAL_GATEWAY_REPLAY_BASE_URL is required for live replay");
   const candidates = claudeMinimizationCandidates(capture);
-  const maximum = Math.min(candidates.length, Number(process.env.LLM_GATEWAY_REPLAY_LIMIT ?? 40));
+  const maximum = Math.min(candidates.length, Number(process.env.LLM_LOCAL_GATEWAY_REPLAY_LIMIT ?? 40));
   for (const candidate of candidates.slice(0, maximum)) {
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/messages?beta=true`, {
       method: "POST",

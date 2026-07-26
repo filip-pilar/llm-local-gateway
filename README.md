@@ -1,7 +1,7 @@
-# llm-gateway
+# llm-local-gateway
 
-`llm-gateway` exposes authenticated Devin and Grok CLI subscriptions through
-one loopback-only daemon:
+`llm-local-gateway` exposes authenticated Devin and Grok CLI subscriptions
+through one loopback-only daemon:
 
 - OpenAI-compatible base URL: `http://127.0.0.1:4317/openai/v1`
 - Anthropic-compatible base URL: `http://127.0.0.1:4317/claude`
@@ -20,8 +20,9 @@ Routing is fixed by model ID. There is no fallback.
 | `swe-1-7-lightning` | Devin |
 | `grok-4.5` | Grok |
 
-Requests with a missing or empty `model` use `LLM_GATEWAY_MODEL`, which defaults
-to `swe-1-6-slow`. Both model-list endpoints always publish all three models.
+Requests with a missing or empty `model` use `LLM_LOCAL_GATEWAY_MODEL`, which
+defaults to `swe-1-6-slow`. Both model-list endpoints always publish all three
+models.
 
 ## Requirements
 
@@ -37,23 +38,23 @@ continues to use the official credential and its existing Windsurf transport.
 
 ```bash
 bun install
-bun run llm-gateway -- serve
+bun run llm-local-gateway -- serve
 ```
 
 Useful commands:
 
 ```bash
-bun run llm-gateway -- status
-bun run llm-gateway -- status --live
-bun run llm-gateway -- help
+bun run llm-local-gateway -- status
+bun run llm-local-gateway -- status --live
+bun run llm-local-gateway -- help
 ```
 
 `status --live` checks only the loopback daemon and model discovery. The
 `smoke` command makes a real inference request and consumes provider quota:
 
 ```bash
-bun run llm-gateway -- smoke --model swe-1-6-slow
-bun run llm-gateway -- smoke --model grok-4.5 --protocol claude
+bun run llm-local-gateway -- smoke --model swe-1-6-slow
+bun run llm-local-gateway -- smoke --model grok-4.5 --protocol claude
 ```
 
 ## Routes
@@ -72,7 +73,8 @@ Anthropic-compatible:
 
 Gateway readiness:
 
-- `GET /__llm_gateway/readiness`
+- `GET /__llm_local_gateway/readiness`
+- legacy alias: `GET /__llm_gateway/readiness`
 
 Readiness returns separate `providers.devin.ready` and
 `providers.grok.ready` values. The endpoint returns HTTP 200 when at least one
@@ -83,17 +85,22 @@ does not stop the other provider or the public daemon.
 
 | Variable | Default |
 | --- | --- |
-| `LLM_GATEWAY_PORT` | `4317` |
-| `LLM_GATEWAY_DEVIN_PORT` | public port + 1 |
-| `LLM_GATEWAY_GROK_PORT` | public port + 2 |
-| `LLM_GATEWAY_MODEL` | `swe-1-6-slow` |
-| `LLM_GATEWAY_DATA_DIR` | `~/.local/share/llm-gateway` |
+| `LLM_LOCAL_GATEWAY_PORT` | `4317` |
+| `LLM_LOCAL_GATEWAY_DEVIN_PORT` | public port + 1 |
+| `LLM_LOCAL_GATEWAY_GROK_PORT` | public port + 2 |
+| `LLM_LOCAL_GATEWAY_MODEL` | `swe-1-6-slow` |
+| `LLM_LOCAL_GATEWAY_DATA_DIR` | `~/.local/share/llm-local-gateway` |
 | `DEVIN_CREDENTIALS_FILE` | `~/.local/share/devin/credentials.toml` |
 | `GROK_HOME` | `~/.grok` |
 | `GROK_CLI` | `~/.grok/bin/grok` |
 
 Equivalent CLI options are available for the public and provider ports, data
 directory, default model, Devin credentials, and Grok home.
+
+For compatibility, the runtime still accepts legacy `LLM_GATEWAY_*`
+environment variables when the corresponding `LLM_LOCAL_GATEWAY_*` variable
+is unset. If `~/.local/share/llm-gateway` already exists and the new data
+directory does not, the existing directory is reused automatically.
 
 ## Security and behavior
 
@@ -118,16 +125,16 @@ npm run test:native
 The default suite is non-live: it uses loopback fixtures and mocked upstreams,
 does not perform inference, and does not consume Devin or Grok quota. Live
 provider and child-agent harnesses are separately gated by explicit
-`LLM_GATEWAY_*` environment variables:
+`LLM_LOCAL_GATEWAY_*` environment variables:
 
 ```bash
-LLM_GATEWAY_LIVE_CONFORMANCE=1 \
-  LLM_GATEWAY_LIVE_MODELS=swe-1-6-slow,grok-4.5 \
+LLM_LOCAL_GATEWAY_LIVE_CONFORMANCE=1 \
+  LLM_LOCAL_GATEWAY_LIVE_MODELS=swe-1-6-slow,grok-4.5 \
   npm run test:live-providers
 
-LLM_GATEWAY_LIVE_COMPAT=1 \
-  LLM_GATEWAY_LIVE_MODEL=swe-1-6-slow \
-  LLM_GATEWAY_LIVE_CODEX_EXEC=1 \
+LLM_LOCAL_GATEWAY_LIVE_COMPAT=1 \
+  LLM_LOCAL_GATEWAY_LIVE_MODEL=swe-1-6-slow \
+  LLM_LOCAL_GATEWAY_LIVE_CODEX_EXEC=1 \
   npm run test:live-subagents
 ```
 
@@ -148,10 +155,10 @@ npm run build:macos
 npm run build:macos:debug
 ```
 
-The release bundle is written to `dist/LLM Gateway.app`. The debug bundle opens
-a normal window for UI testing and defaults to isolated port 4717. Both bundles
-contain the compiled gateway helper and Devin authentication PTY driver;
-neither contains credentials.
+The release bundle is written to `dist/LLM Local Gateway.app`. The debug bundle
+opens a normal window for UI testing and defaults to isolated port 4717. Both
+bundles contain the compiled gateway helper and Devin authentication PTY
+driver; neither contains credentials.
 
 Build only the standalone helper:
 

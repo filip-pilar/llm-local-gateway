@@ -1,5 +1,6 @@
 import { createServer } from "node:net";
 import { readDevinSessionToken } from "../core/devin-credentials.mjs";
+import { gatewayEnvironmentValue } from "../core/environment.mjs";
 import {
   readGrokAccessToken,
   readGrokCLIVersion,
@@ -11,7 +12,7 @@ import { startOpenAIEndpoint } from "../http/openai-endpoint.mjs";
 import { startDevinTransport } from "../transport/devin.mjs";
 import { startGrokTransport } from "../transport/grok.mjs";
 
-const publicName = "llm-gateway";
+const publicName = "llm-local-gateway";
 
 function parsePort(value, name) {
   const port = Number(value);
@@ -59,21 +60,25 @@ async function startProvider(name, start, writeLog) {
 
 export async function startBridge({ env = process.env, log, boundaryObserver } = {}) {
   const writeLog = log || ((message) => console.log(`[${publicName}] ${message}`));
-  const port = parsePort(env.LLM_GATEWAY_PORT ?? 4317, "LLM_GATEWAY_PORT");
+  const port = parsePort(
+    gatewayEnvironmentValue(env, "PORT") ?? 4317,
+    "LLM_LOCAL_GATEWAY_PORT",
+  );
   const devinPort = parsePort(
-    env.LLM_GATEWAY_DEVIN_PORT ?? port + 1,
-    "LLM_GATEWAY_DEVIN_PORT",
+    gatewayEnvironmentValue(env, "DEVIN_PORT") ?? port + 1,
+    "LLM_LOCAL_GATEWAY_DEVIN_PORT",
   );
   const grokPort = parsePort(
-    env.LLM_GATEWAY_GROK_PORT ?? port + 2,
-    "LLM_GATEWAY_GROK_PORT",
+    gatewayEnvironmentValue(env, "GROK_PORT") ?? port + 2,
+    "LLM_LOCAL_GATEWAY_GROK_PORT",
   );
   if (new Set([port, devinPort, grokPort]).size !== 3) {
     throw new Error("The public, Devin, and Grok ports must be different");
   }
-  const defaultModel = env.LLM_GATEWAY_MODEL ?? providerModels.devin[0];
+  const defaultModel =
+    gatewayEnvironmentValue(env, "MODEL") ?? providerModels.devin[0];
   if (!supportedModels.includes(defaultModel)) {
-    throw new Error(`LLM_GATEWAY_MODEL is not supported: ${defaultModel}`);
+    throw new Error(`LLM_LOCAL_GATEWAY_MODEL is not supported: ${defaultModel}`);
   }
 
   await assertPortAvailable(port, "Public gateway");

@@ -8,7 +8,7 @@ import test from "node:test";
 
 test("standalone helper build includes both provider transports", { timeout: 30_000 }, () => {
   if (process.platform !== "darwin" || process.arch !== "arm64") return;
-  const output = join(mkdtempSync(join(tmpdir(), "llm-gateway-helper-build-")), "helper");
+  const output = join(mkdtempSync(join(tmpdir(), "llm-local-gateway-helper-build-")), "helper");
   const build = spawnSync(
     process.execPath,
     [
@@ -21,5 +21,5 @@ test("standalone helper build includes both provider transports", { timeout: 30_
   assert.equal(build.status, 0, build.stderr);
   const help = spawnSync(output, ["--help"], { encoding: "utf8", timeout: 10_000 });
   assert.equal(help.status, 0, help.stderr);
-  assert.match(help.stdout, /Usage: llm-gateway/);
+  assert.match(help.stdout, /Usage: llm-local-gateway/);
 });

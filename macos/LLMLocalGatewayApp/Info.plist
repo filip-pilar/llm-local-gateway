@@ -5,13 +5,13 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleExecutable</key>
-  <string>LLMGatewayApp</string>
+  <string>LLMLocalGatewayApp</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.llmgateway.menu</string>
+  <string>dev.llmlocalgateway.menu</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>LLM Gateway</string>
+  <string>LLM Local Gateway</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

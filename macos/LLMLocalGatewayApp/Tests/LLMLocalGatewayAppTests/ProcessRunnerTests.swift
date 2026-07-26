@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import LLMGatewayApp
+@testable import LLMLocalGatewayApp
 
 @Test func drainsLargeStandardOutputAndErrorWithoutDeadlocking() throws {
     let command = """

@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 import Testing
-@testable import LLMGatewayApp
+@testable import LLMLocalGatewayApp
 
 private func fakeCLI(_ source: String) throws -> URL {
     let directory = FileManager.default.temporaryDirectory

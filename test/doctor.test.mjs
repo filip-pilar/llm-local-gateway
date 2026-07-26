@@ -10,8 +10,8 @@ import {
 import { supportedModels } from "../src/core/providers.mjs";
 
 function fixture() {
-  const home = mkdtempSync(join(tmpdir(), "llm-gateway-doctor-"));
-  const dataDir = join(home, ".local", "share", "llm-gateway");
+  const home = mkdtempSync(join(tmpdir(), "llm-local-gateway-doctor-"));
+  const dataDir = join(home, ".local", "share", "llm-local-gateway");
   const devinCredentials = join(
     home,
     ".local",
@@ -42,7 +42,7 @@ function fixture() {
     dataDir,
     devinCredentials,
     grokCredentials,
-    env: { HOME: home, LLM_GATEWAY_DATA_DIR: dataDir },
+    env: { HOME: home, LLM_LOCAL_GATEWAY_DATA_DIR: dataDir },
   };
 }
 
@@ -81,7 +81,7 @@ test("live status checks model discovery and each provider readiness", async () 
   const fetchImpl = async (url, options = {}) => {
     const target = new URL(url);
     calls.push({ target, options });
-    if (target.pathname === "/__llm_gateway/readiness") {
+    if (target.pathname === "/__llm_local_gateway/readiness") {
       return new Response(JSON.stringify({
         ready: true,
         default_model: "swe-1-6-slow",
@@ -91,7 +91,7 @@ test("live status checks model discovery and each provider readiness", async () 
         },
       }), {
         status: 200,
-        headers: { "x-llm-gateway": "1" },
+        headers: { "x-llm-local-gateway": "1" },
       });
     }
     return new Response(JSON.stringify({
@@ -117,7 +117,7 @@ test("live status reports provider readiness independently", async () => {
   const value = fixture();
   const fetchImpl = async (url) => {
     const target = new URL(url);
-    if (target.pathname === "/__llm_gateway/readiness") {
+    if (target.pathname === "/__llm_local_gateway/readiness") {
       return new Response(JSON.stringify({
         ready: true,
         providers: {
@@ -126,7 +126,7 @@ test("live status reports provider readiness independently", async () => {
         },
       }), {
         status: 200,
-        headers: { "x-llm-gateway": "1" },
+        headers: { "x-llm-local-gateway": "1" },
       });
     }
     return new Response(JSON.stringify({
@@ -149,7 +149,7 @@ test("live status refuses to probe outside loopback", async () => {
   const report = await runDiagnostics({
     env: {
       ...value.env,
-      LLM_GATEWAY_MODELS_URL: "https://example.com/openai/v1/models",
+      LLM_LOCAL_GATEWAY_MODELS_URL: "https://example.com/openai/v1/models",
     },
     live: true,
     cliChecks,

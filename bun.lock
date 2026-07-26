@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "llm-gateway",
+      "name": "llm-local-gateway",
       "dependencies": {
         "windsurf-api": "github:dwgx/WindsurfAPI#81370f553718153bcd52297251cc565562d85645",
       },

@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 import Testing
-@testable import LLMGatewayApp
+@testable import LLMLocalGatewayApp
 
 @Test func waitsForGracefulLifelineShutdown() async throws {
     let process = Process()

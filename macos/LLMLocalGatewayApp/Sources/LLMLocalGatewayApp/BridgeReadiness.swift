@@ -18,14 +18,19 @@ enum BridgeReadiness {
 
     static func inspect(port: Int = 4317) async -> Snapshot {
         let empty = Snapshot(isReady: false, models: [], defaultModel: nil, providers: [:])
-        guard let url = URL(string: "http://127.0.0.1:\(port)/__llm_gateway/readiness") else {
+        guard let url = URL(
+            string: "http://127.0.0.1:\(port)/__llm_local_gateway/readiness"
+        ) else {
             return empty
         }
         do {
             let (readinessData, response) = try await URLSession.shared.data(from: url)
             guard let http = response as? HTTPURLResponse,
                   [200, 503].contains(http.statusCode),
-                  http.value(forHTTPHeaderField: "x-llm-gateway") == "1",
+                  (
+                    http.value(forHTTPHeaderField: "x-llm-local-gateway") == "1"
+                    || http.value(forHTTPHeaderField: "x-llm-gateway") == "1"
+                  ),
                   let readiness = try? JSONDecoder().decode(ReadinessPayload.self, from: readinessData),
                   let modelsURL = URL(string: "http://127.0.0.1:\(port)/openai/v1/models") else {
                 return empty

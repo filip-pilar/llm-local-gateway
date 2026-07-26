@@ -10,15 +10,19 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const packageRoot = join(root, "macos", "LLMGatewayApp");
+const packageRoot = join(root, "macos", "LLMLocalGatewayApp");
 const debug = process.argv.includes("--debug");
 const configuration = debug ? "debug" : "release";
-const app = join(root, "dist", debug ? "LLM Gateway Debug.app" : "LLM Gateway.app");
+const app = join(
+  root,
+  "dist",
+  debug ? "LLM Local Gateway Debug.app" : "LLM Local Gateway.app",
+);
 const contents = join(app, "Contents");
 const macos = join(contents, "MacOS");
 const resources = join(contents, "Resources");
 const scratch = join(root, ".build", `macos-swift-${configuration}`);
-const helper = join(root, ".build", "macos", "llm-gateway-helper");
+const helper = join(root, ".build", "macos", "llm-local-gateway-helper");
 const authDriver = join(root, ".build", "macos", "devin-auth-pty");
 const architecture = process.arch === "arm64" ? "arm64" : "x86_64";
 
@@ -71,19 +75,22 @@ const binPath = run("swift", [...swiftArguments, "--show-bin-path"], {
   capture: true,
 });
 
-copyFileSync(join(binPath, "LLMGatewayApp"), join(macos, "LLMGatewayApp"));
-copyFileSync(helper, join(resources, "llm-gateway-helper"));
+copyFileSync(
+  join(binPath, "LLMLocalGatewayApp"),
+  join(macos, "LLMLocalGatewayApp"),
+);
+copyFileSync(helper, join(resources, "llm-local-gateway-helper"));
 copyFileSync(authDriver, join(resources, "devin-auth-pty"));
 copyFileSync(join(packageRoot, "Info.plist"), join(contents, "Info.plist"));
-chmodSync(join(macos, "LLMGatewayApp"), 0o755);
-chmodSync(join(resources, "llm-gateway-helper"), 0o755);
+chmodSync(join(macos, "LLMLocalGatewayApp"), 0o755);
+chmodSync(join(resources, "llm-local-gateway-helper"), 0o755);
 chmodSync(join(resources, "devin-auth-pty"), 0o755);
 
 run("plutil", ["-lint", join(contents, "Info.plist")]);
 for (const executable of [
-  join(resources, "llm-gateway-helper"),
+  join(resources, "llm-local-gateway-helper"),
   join(resources, "devin-auth-pty"),
-  join(macos, "LLMGatewayApp"),
+  join(macos, "LLMLocalGatewayApp"),
 ]) {
   run("codesign", ["--force", "--sign", "-", executable]);
 }

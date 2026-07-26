@@ -61,7 +61,7 @@ different loopback port. Authentication, port, or startup failure is caught and
 stored only for that provider. The public endpoint still starts and returns a
 stable provider-unavailable error for models owned by the failed provider.
 
-`GET /__llm_gateway/readiness` reports:
+`GET /__llm_local_gateway/readiness` reports:
 
 ```json
 {
@@ -77,6 +77,10 @@ stable provider-unavailable error for models owned by the failed provider.
 The top-level value is true when at least one provider is ready. Diagnostics
 report CLI authentication, credential state, live transport readiness, and
 model discovery separately for both providers.
+
+The former `/__llm_gateway/readiness` route and `x-llm-gateway` identity header
+remain available as compatibility aliases. New clients use
+`x-llm-local-gateway`.
 
 Shutdown closes the public server and both provider servers. Downstream
 cancellation destroys only the selected upstream request.
@@ -96,7 +100,7 @@ diagnosis.
 ## Source layout
 
 ```text
-bin/llm-gateway.mjs             CLI entry point
+bin/llm-local-gateway.mjs             CLI entry point
 src/core/providers.mjs          model ownership
 src/core/*credentials.mjs       provider credential readers
 src/http/openai-endpoint.mjs    public protocols and router
@@ -105,7 +109,7 @@ src/service/diagnostics.mjs     provider and endpoint status
 src/transport/devin.mjs         Devin/Windsurf startup
 src/transport/grok.mjs          Grok OAuth transport
 src/transport/anthropic-*.mjs   Grok Anthropic adapter
-macos/LLMGatewayApp             unified native menu-bar controller
+macos/LLMLocalGatewayApp             unified native menu-bar controller
 bin/build-macos-app.mjs         signed local app packaging
 ```
 

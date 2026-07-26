@@ -32,7 +32,7 @@ function missingProviderEnv(root, values = {}) {
   return {
     HOME: root,
     PATH: "",
-    LLM_GATEWAY_DATA_DIR: join(root, "gateway-data"),
+    LLM_LOCAL_GATEWAY_DATA_DIR: join(root, "gateway-data"),
     DEVIN_CREDENTIALS_FILE: join(root, "missing-devin.toml"),
     GROK_HOME: join(root, "missing-grok-home"),
     GROK_CLI: join(root, "missing-grok"),
@@ -41,7 +41,7 @@ function missingProviderEnv(root, values = {}) {
 }
 
 test("an occupied provider port does not prevent the other provider lifecycle or public endpoint", async () => {
-  const root = mkdtempSync(join(tmpdir(), "llm-gateway-provider-collision-"));
+  const root = mkdtempSync(join(tmpdir(), "llm-local-gateway-provider-collision-"));
   const occupied = createServer((_request, response) => response.end("sentinel"));
   const devinPort = await listen(occupied);
   const publicPort = await availablePort();
@@ -49,9 +49,9 @@ test("an occupied provider port does not prevent the other provider lifecycle or
   const logs = [];
   const bridge = await startBridge({
     env: missingProviderEnv(root, {
-      LLM_GATEWAY_PORT: String(publicPort),
-      LLM_GATEWAY_DEVIN_PORT: String(devinPort),
-      LLM_GATEWAY_GROK_PORT: String(grokPort),
+      LLM_LOCAL_GATEWAY_PORT: String(publicPort),
+      LLM_LOCAL_GATEWAY_DEVIN_PORT: String(devinPort),
+      LLM_LOCAL_GATEWAY_GROK_PORT: String(grokPort),
     }),
     log: (message) => logs.push(message),
   });
@@ -62,7 +62,7 @@ test("an occupied provider port does not prevent the other provider lifecycle or
       new RegExp(`Internal Devin transport port 127\\.0\\.0\\.1:${devinPort} is already in use`),
     );
     const readiness = await fetch(
-      `http://127.0.0.1:${publicPort}/__llm_gateway/readiness`,
+      `http://127.0.0.1:${publicPort}/__llm_local_gateway/readiness`,
     );
     assert.equal(readiness.status, 503);
     const body = await readiness.json();
@@ -76,7 +76,7 @@ test("an occupied provider port does not prevent the other provider lifecycle or
 });
 
 test("server rejects an occupied public port before reading any provider secret", async () => {
-  const root = mkdtempSync(join(tmpdir(), "llm-gateway-public-collision-"));
+  const root = mkdtempSync(join(tmpdir(), "llm-local-gateway-public-collision-"));
   const occupied = createServer();
   const publicPort = await listen(occupied);
   const devinPort = await availablePort();
@@ -85,9 +85,9 @@ test("server rejects an occupied public port before reading any provider secret"
     await assert.rejects(
       startBridge({
         env: missingProviderEnv(root, {
-          LLM_GATEWAY_PORT: String(publicPort),
-          LLM_GATEWAY_DEVIN_PORT: String(devinPort),
-          LLM_GATEWAY_GROK_PORT: String(grokPort),
+          LLM_LOCAL_GATEWAY_PORT: String(publicPort),
+          LLM_LOCAL_GATEWAY_DEVIN_PORT: String(devinPort),
+          LLM_LOCAL_GATEWAY_GROK_PORT: String(grokPort),
         }),
         log: () => {},
       }),

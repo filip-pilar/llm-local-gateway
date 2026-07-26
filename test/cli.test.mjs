@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const commands = [
-  "llm-gateway.mjs",
+  "llm-local-gateway.mjs",
   "doctor.mjs",
   "smoke.mjs",
 ];
@@ -26,7 +26,7 @@ test("serve CLI rejects an invalid custom port before reading authentication", (
   const result = spawnSync(
     process.execPath,
     [
-      fileURLToPath(new URL("../bin/llm-gateway.mjs", import.meta.url)),
+      fileURLToPath(new URL("../bin/llm-local-gateway.mjs", import.meta.url)),
       "serve",
       "--port",
       "0",
@@ -34,7 +34,7 @@ test("serve CLI rejects an invalid custom port before reading authentication", (
     { encoding: "utf8" },
   );
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Invalid LLM_GATEWAY_PORT: 0/);
+  assert.match(result.stderr, /Invalid LLM_LOCAL_GATEWAY_PORT: 0/);
 });
 
 test("smoke rejects invalid network settings before reading bridge state", () => {
@@ -43,17 +43,17 @@ test("smoke rejects invalid network settings before reading bridge state", () =>
     [fileURLToPath(new URL("../bin/smoke.mjs", import.meta.url))],
     {
       encoding: "utf8",
-      env: { ...process.env, LLM_GATEWAY_PORT: "0" },
+      env: { ...process.env, LLM_LOCAL_GATEWAY_PORT: "0" },
     },
   );
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Invalid LLM_GATEWAY_PORT: 0/);
+  assert.match(result.stderr, /Invalid LLM_LOCAL_GATEWAY_PORT: 0/);
 });
 
 test("unified CLI rejects unknown commands without side effects", () => {
   const result = spawnSync(
     process.execPath,
-    [fileURLToPath(new URL("../bin/llm-gateway.mjs", import.meta.url)), "not-a-command"],
+    [fileURLToPath(new URL("../bin/llm-local-gateway.mjs", import.meta.url)), "not-a-command"],
     { encoding: "utf8" },
   );
   assert.equal(result.status, 1);
@@ -63,7 +63,7 @@ test("unified CLI rejects unknown commands without side effects", () => {
 test("the obsolete endpoint key command is not available", () => {
   const result = spawnSync(
     process.execPath,
-    [fileURLToPath(new URL("../bin/llm-gateway.mjs", import.meta.url)), "key"],
+    [fileURLToPath(new URL("../bin/llm-local-gateway.mjs", import.meta.url)), "key"],
     { encoding: "utf8" },
   );
   assert.equal(result.status, 1);
