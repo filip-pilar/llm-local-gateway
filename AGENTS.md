@@ -79,7 +79,6 @@ consume provider quota:
 
 - `smoke`
 - `test:live-providers`
-- `test:live-subagents`
 - the macOS app's bounded live verification
 
 Keep live-test environment gates intact. Never expose CLI output that might

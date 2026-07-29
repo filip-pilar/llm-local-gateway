@@ -136,18 +136,13 @@ bun run test:coverage
 
 The default suite is non-live: it uses loopback fixtures and mocked upstreams,
 does not perform inference, and does not consume Devin or Grok quota. Live
-provider and child-agent harnesses are separately gated by explicit
-`LLM_LOCAL_GATEWAY_*` environment variables:
+provider tests are separately gated by explicit `LLM_LOCAL_GATEWAY_*`
+environment variables:
 
 ```bash
 LLM_LOCAL_GATEWAY_LIVE_CONFORMANCE=1 \
   LLM_LOCAL_GATEWAY_LIVE_MODELS=swe-1-6-slow,grok-4.5 \
   bun run test:live-providers
-
-LLM_LOCAL_GATEWAY_LIVE_COMPAT=1 \
-  LLM_LOCAL_GATEWAY_LIVE_MODEL=swe-1-6-slow \
-  LLM_LOCAL_GATEWAY_LIVE_CODEX_EXEC=1 \
-  bun run test:live-subagents
 ```
 
 These commands consume provider quota. `swe-1-7-lightning` also requires that
