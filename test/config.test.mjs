@@ -77,36 +77,97 @@ test("Grok OAuth reads repair permissions and reject symbolic links", () => {
   assert.throws(() => readGrokAccessToken(link), /Cannot securely read/);
 });
 
-test("Grok OAuth refresh stays owned by the official CLI and redacts failures", () => {
+test("Grok OAuth refresh stays owned by the official CLI and isolates its environment", async () => {
   const secret = "refresh-token-that-must-not-escape";
   let call;
-  refreshGrokOAuthSession({
+  await refreshGrokOAuthSession({
     cliPath: "/fixture/grok",
-    env: { XAI_API_KEY: secret, GROK_API_KEY: secret },
-    run: (path, args, options) => {
+    env: {
+      HOME: "/fixture/home",
+      GROK_HOME: "/fixture/grok-home",
+      PATH: "/fixture/bin",
+      API_KEY: secret,
+      XAI_API_KEY: secret,
+      GROK_API_KEY: secret,
+      CODEIUM_API_KEY: "placeholder-devin",
+      DASHBOARD_PASSWORD: "placeholder-dashboard",
+      DEVIN_CONNECT: "1",
+      WINDSURFAPI_TRACE: "1",
+      WINDSURF_TRACE: "1",
+      POLICY_BLOCK_SAMPLE: "raw-policy-sample",
+      ASTRAFLOW_STATE: "provider-state",
+      DEBUG_REQUEST_BODIES: "1",
+    },
+    run: (path, args, options, callback) => {
       call = { path, args, options };
-      return { status: 0, stdout: secret, stderr: secret };
+      queueMicrotask(() => callback(null, secret, secret));
     },
   });
   assert.equal(call.path, "/fixture/grok");
   assert.deepEqual(call.args, ["--no-auto-update", "models"]);
+  assert.equal(call.options.env.HOME, "/fixture/home");
+  assert.equal(call.options.env.GROK_HOME, "/fixture/grok-home");
+  assert.equal(call.options.env.PATH, "/fixture/bin");
+  assert.equal(call.options.env.API_KEY, undefined);
   assert.equal(call.options.env.XAI_API_KEY, undefined);
   assert.equal(call.options.env.GROK_API_KEY, undefined);
+  assert.equal(call.options.env.CODEIUM_API_KEY, undefined);
+  assert.equal(call.options.env.DASHBOARD_PASSWORD, undefined);
+  assert.equal(call.options.env.DEVIN_CONNECT, undefined);
+  assert.equal(call.options.env.WINDSURFAPI_TRACE, undefined);
+  assert.equal(call.options.env.WINDSURF_TRACE, undefined);
+  assert.equal(call.options.env.POLICY_BLOCK_SAMPLE, undefined);
+  assert.equal(call.options.env.ASTRAFLOW_STATE, undefined);
+  assert.equal(call.options.env.DEBUG_REQUEST_BODIES, undefined);
 
-  assert.throws(
-    () => refreshGrokOAuthSession({
+  await assert.rejects(
+    refreshGrokOAuthSession({
       cliPath: "/fixture/grok",
-      run: () => ({ status: 1, stderr: secret }),
+      run: (_path, _args, _options, callback) => {
+        queueMicrotask(() => callback(Object.assign(new Error(secret), { code: 1 })));
+      },
     }),
     (error) => !error.message.includes(secret),
   );
 });
 
+test("Grok OAuth refresh does not block the event loop", async () => {
+  let childFinished = false;
+  const refresh = refreshGrokOAuthSession({
+    cliPath: "/fixture/grok",
+    run: (_path, _args, _options, callback) => {
+      setTimeout(() => {
+        childFinished = true;
+        callback(null, "", "");
+      }, 25);
+    },
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(childFinished, false);
+  await refresh;
+  assert.equal(childFinished, true);
+});
+
 test("accepts only a recognizable official Grok CLI version", () => {
+  let versionEnvironment;
   assert.equal(readGrokCLIVersion({
     cliPath: "/fixture/grok",
-    run: () => ({ status: 0, stdout: "grok 0.2.111 (fixture)\n" }),
+    env: {
+      HOME: "/fixture/home",
+      CODEIUM_API_KEY: "placeholder-devin",
+      DASHBOARD_PASSWORD: "placeholder-dashboard",
+      POLICY_BLOCK_SAMPLE: "raw-policy-sample",
+    },
+    run: (_path, _args, options) => {
+      versionEnvironment = options.env;
+      return { status: 0, stdout: "grok 0.2.111 (fixture)\n" };
+    },
   }), "0.2.111");
+  assert.equal(versionEnvironment.HOME, "/fixture/home");
+  assert.equal(versionEnvironment.CODEIUM_API_KEY, undefined);
+  assert.equal(versionEnvironment.DASHBOARD_PASSWORD, undefined);
+  assert.equal(versionEnvironment.POLICY_BLOCK_SAMPLE, undefined);
   assert.throws(
     () => readGrokCLIVersion({
       cliPath: "/fixture/not-grok",

@@ -12,7 +12,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { reconcileUpstreamAccounts } from "../src/core/devin-upstream-state.mjs";
+import {
+  reconcileUpstreamAccounts,
+  scrubUpstreamPolicySamples,
+} from "../src/core/devin-upstream-state.mjs";
 
 test("keeps only the current Devin credential in persisted upstream state", () => {
   const root = mkdtempSync(join(tmpdir(), "devin-bridge-upstream-state-"));
@@ -95,4 +98,49 @@ test("refuses a symlinked upstream accounts file without changing its target", (
   );
   assert.equal(statSync(target).mode & 0o777, 0o644);
   assert.equal(readFileSync(target, "utf8"), "[]\n");
+});
+
+test("removes persisted policy samples without changing aggregate stats", () => {
+  const root = mkdtempSync(join(tmpdir(), "devin-bridge-upstream-stats-"));
+  const statsPath = join(root, "stats.json");
+  const placeholder = "placeholder-system-prompt-that-must-not-persist";
+  writeFileSync(statsPath, `${JSON.stringify({
+    totalRequests: 4,
+    policyBlockedCount: 2,
+    recentPolicyBlocks: [
+      { promptHash: "first", promptSample: placeholder },
+      { promptHash: "second", promptSample: "another-placeholder" },
+    ],
+  })}\n`, { mode: 0o644 });
+
+  assert.deepEqual(scrubUpstreamPolicySamples(root), {
+    statsPath,
+    removed: 2,
+  });
+  const persisted = readFileSync(statsPath, "utf8");
+  assert.doesNotMatch(persisted, new RegExp(placeholder));
+  assert.deepEqual(JSON.parse(persisted), {
+    totalRequests: 4,
+    policyBlockedCount: 2,
+    recentPolicyBlocks: [],
+  });
+  assert.equal(statSync(statsPath).mode & 0o777, 0o600);
+});
+
+test("refuses a symlinked upstream stats file without changing its target", () => {
+  const root = mkdtempSync(join(tmpdir(), "devin-bridge-upstream-stats-link-"));
+  const target = join(root, "outside.json");
+  const statsPath = join(root, "stats.json");
+  const source = JSON.stringify({
+    recentPolicyBlocks: [{ promptSample: "placeholder-secret" }],
+  });
+  writeFileSync(target, source, { mode: 0o644 });
+  symlinkSync(target, statsPath);
+
+  assert.throws(
+    () => scrubUpstreamPolicySamples(root),
+    /unsafe upstream stats file/,
+  );
+  assert.equal(readFileSync(target, "utf8"), source);
+  assert.equal(statSync(target).mode & 0o777, 0o644);
 });

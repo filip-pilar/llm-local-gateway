@@ -1,5 +1,5 @@
 import { readinessPath } from "../core/readiness.mjs";
-import { supportedModels } from "../http/openai-endpoint.mjs";
+import { supportedModels } from "../core/providers.mjs";
 
 export async function runDirectSmoke({
   port = 4317,

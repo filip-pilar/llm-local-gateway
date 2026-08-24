@@ -22,8 +22,8 @@ Responses streaming.
 
 The Grok provider reads only the current access-token field from the protected
 official CLI session. It never reads or stores the refresh token. On an
-upstream `401`, it asks the CLI to perform credential-opaque model discovery,
-rereads the access token, and retries once.
+upstream `401`, it shares one asynchronous CLI model-discovery refresh across
+waiting requests, rereads the access token, and retries each request once.
 
 ## xAI OAuth is not X OAuth
 
@@ -76,7 +76,8 @@ lifecycle completion, and routing-map cleanup.
 - fixed upstream `cli-chat-proxy.grok.com:443/v1/responses`;
 - official CLI access-token reader using `O_NOFOLLOW`, regular-file checks, and
   mode `0600`;
-- CLI-owned refresh on `401`, followed by one retry;
+- asynchronous single-flight CLI-owned refresh on `401`, followed by one retry
+  per request;
 - credential-opaque CLI/model diagnostics;
 - mocked Responses streaming, non-stream aggregation, tools, refresh, and
   Anthropic translation tests;

@@ -20,6 +20,7 @@ const MAX_JSON_DEPTH = 100;
 const BRIDGE_IDENTITY_HEADER = "x-llm-local-gateway";
 const LEGACY_BRIDGE_IDENTITY_HEADER = "x-llm-gateway";
 const LOOPBACK_HOST = "127.0.0.1";
+const MAX_INTERNAL_CAPABILITY_BYTES = 1_024;
 export const openAIBasePath = "/openai/v1";
 export const claudeBasePath = "/claude";
 const HOP_BY_HOP_HEADERS = new Set([
@@ -32,8 +33,6 @@ const HOP_BY_HOP_HEADERS = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
-
-export { supportedModels };
 
 export function buildModelsResponse() {
   return {
@@ -72,7 +71,12 @@ function sendJson(response, status, body, headers = {}) {
   response.end(payload);
 }
 
-function forwardedHeaders(headers, upstreamPort, bodyLength) {
+function forwardedHeaders(
+  headers,
+  upstreamPort,
+  bodyLength,
+  internalCapability,
+) {
   const forwarded = {};
   const connectionTokens = new Set(
     String(headers.connection || "")
@@ -96,6 +100,7 @@ function forwardedHeaders(headers, upstreamPort, bodyLength) {
   }
   forwarded.host = `127.0.0.1:${upstreamPort}`;
   if (bodyLength != null) forwarded["content-length"] = String(bodyLength);
+  if (internalCapability != null) forwarded["x-api-key"] = internalCapability;
   return forwarded;
 }
 
@@ -111,13 +116,67 @@ function responseHeaders(headers) {
     if (
       value == null ||
       HOP_BY_HOP_HEADERS.has(name) ||
-      connectionTokens.has(name)
+      connectionTokens.has(name) ||
+      name.startsWith("access-control-")
     ) {
       continue;
     }
     forwarded[name] = value;
   }
   return forwarded;
+}
+
+function hasJsonContentType(headers) {
+  const value = headers["content-type"];
+  if (typeof value !== "string") return false;
+  return value.split(";", 1)[0].trim().toLowerCase() === "application/json";
+}
+
+function isLoopbackHostHeader(value) {
+  if (typeof value !== "string") return false;
+  const match = /^(?:127\.0\.0\.1|localhost\.?|\[::1\])(?::([0-9]{1,5}))?$/i.exec(value);
+  if (!match) return false;
+  if (match[1] == null) return true;
+  const port = Number(match[1]);
+  return port >= 1 && port <= 65_535;
+}
+
+function isBrowserOriginRequest(headers) {
+  if (headers.origin != null) return true;
+  return String(headers["sec-fetch-site"] ?? "").toLowerCase() === "cross-site";
+}
+
+function rejectNonJsonInference(request, response, protocol) {
+  if (hasJsonContentType(request.headers)) return false;
+  request.resume();
+  if (protocol === "claude") {
+    anthropicError(
+      response,
+      415,
+      "invalid_request_error",
+      "Content-Type must be application/json.",
+    );
+  } else {
+    sendJson(response, 415, {
+      error: {
+        type: "invalid_content_type",
+        message: "Content-Type must be application/json.",
+      },
+    });
+  }
+  return true;
+}
+
+function validateInternalCapability(value) {
+  if (value == null) return;
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    Buffer.byteLength(value) > MAX_INTERNAL_CAPABILITY_BYTES ||
+    /[^\x21-\x7e]/.test(value)
+  ) {
+    throw new Error("Internal transport capability must be a bounded header-safe string");
+  }
 }
 
 function exceedsJsonDepth(value, maximumDepth = MAX_JSON_DEPTH) {
@@ -192,9 +251,15 @@ function proxyBuffer(
   upstreamPath = request.url,
   protocol = "openai",
   boundaryObserver,
+  internalCapability,
 ) {
   const { upstreamPort, provider } = route;
-  const outgoingHeaders = forwardedHeaders(request.headers, upstreamPort, payload.length);
+  const outgoingHeaders = forwardedHeaders(
+    request.headers,
+    upstreamPort,
+    payload.length,
+    internalCapability,
+  );
   observeRequest(boundaryObserver, {
     boundary: "internal_transport",
     protocol,
@@ -264,6 +329,7 @@ function forwardResponses({
   allowedModels,
   routeForModel,
   boundaryObserver,
+  internalCapability,
 }) {
   if (!initialBody || typeof initialBody !== "object" || Array.isArray(initialBody)) {
     sendJson(response, 400, {
@@ -326,6 +392,7 @@ function forwardResponses({
     "/v1/responses",
     "openai",
     boundaryObserver,
+    internalCapability,
   );
 }
 
@@ -413,6 +480,7 @@ function proxyAnthropic(
   allowedModels,
   routeForModel,
   boundaryObserver,
+  internalCapability,
 ) {
   const declaredLength = Number(request.headers["content-length"]);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_RESPONSES_BODY_BYTES) {
@@ -457,42 +525,56 @@ function proxyAnthropic(
       );
       return;
     }
-    if (!body || typeof body !== "object" || Array.isArray(body) || exceedsJsonDepth(body)) {
-      anthropicError(response, 400, "invalid_request_error", "Messages request must be a JSON object within the bridge depth limit.");
-      return;
-    }
-    if (
-      body.model != null &&
-      body.model !== "" &&
-      (typeof body.model !== "string" || !allowedModels.has(body.model))
-    ) {
-      anthropicError(response, 400, "invalid_request_error", "The requested model is not available through this bridge.");
-      return;
-    }
-    const withModel = body.model == null || body.model === ""
-      ? { ...body, model: defaultModel }
-      : body;
-    const prepared = prepareClaudeChildRequest(request.headers, withModel);
-    const changed = prepared.changed || withModel !== body;
-    const payload = changed ? Buffer.from(JSON.stringify(prepared.body)) : original;
-    const route = routeForModel(prepared.body.model);
-    if (!route?.ready) {
-      providerUnavailable(
+    try {
+      if (!body || typeof body !== "object" || Array.isArray(body) || exceedsJsonDepth(body)) {
+        anthropicError(response, 400, "invalid_request_error", "Messages request must be a JSON object within the bridge depth limit.");
+        return;
+      }
+      if (
+        body.model != null &&
+        body.model !== "" &&
+        (typeof body.model !== "string" || !allowedModels.has(body.model))
+      ) {
+        anthropicError(response, 400, "invalid_request_error", "The requested model is not available through this bridge.");
+        return;
+      }
+      const withModel = body.model == null || body.model === ""
+        ? { ...body, model: defaultModel }
+        : body;
+      const prepared = prepareClaudeChildRequest(request.headers, withModel);
+      const changed = prepared.changed || withModel !== body;
+      const payload = changed ? Buffer.from(JSON.stringify(prepared.body)) : original;
+      const route = routeForModel(prepared.body.model);
+      if (!route?.ready) {
+        providerUnavailable(
+          response,
+          "claude",
+          route?.provider ?? providerForModel(prepared.body.model),
+        );
+        return;
+      }
+      proxyBuffer(
+        request,
         response,
+        route,
+        payload,
+        upstreamPath,
         "claude",
-        route?.provider ?? providerForModel(prepared.body.model),
+        boundaryObserver,
+        internalCapability,
       );
-      return;
+    } catch {
+      if (response.destroyed || response.writableEnded) return;
+      if (response.headersSent) response.destroy();
+      else {
+        anthropicError(
+          response,
+          400,
+          "invalid_request_error",
+          "Messages request could not be forwarded safely.",
+        );
+      }
     }
-    proxyBuffer(
-      request,
-      response,
-      route,
-      payload,
-      upstreamPath,
-      "claude",
-      boundaryObserver,
-    );
   });
 }
 
@@ -502,11 +584,13 @@ export function createOpenAIEndpoint({
   defaultModel = "swe-1-6-slow",
   isUpstreamReady = () => true,
   boundaryObserver,
+  internalCapability,
 }) {
   const allowedModels = new Set(supportedModels);
   if (!allowedModels.has(defaultModel)) {
     throw new Error(`Default model is not supported by the bridge: ${defaultModel}`);
   }
+  validateInternalCapability(internalCapability);
   const routes = Object.fromEntries(
     ["devin", "grok"].map((provider) => {
       const configured = providerRoutes?.[provider];
@@ -557,6 +641,26 @@ export function createOpenAIEndpoint({
       });
       return;
     }
+    if (!isLoopbackHostHeader(request.headers.host)) {
+      request.resume();
+      sendJson(response, 400, {
+        error: {
+          type: "invalid_host",
+          message: "Host must identify the loopback gateway.",
+        },
+      });
+      return;
+    }
+    if (isBrowserOriginRequest(request.headers)) {
+      request.resume();
+      sendJson(response, 403, {
+        error: {
+          type: "browser_request_rejected",
+          message: "Browser-origin requests are not accepted by this loopback gateway.",
+        },
+      });
+      return;
+    }
 
     if (
       url.pathname === readinessPath ||
@@ -598,11 +702,13 @@ export function createOpenAIEndpoint({
         }, { allow: "POST" });
         return;
       }
+      if (rejectNonJsonInference(request, response, "openai")) return;
       proxyResponses(request, response, {
         defaultModel,
         allowedModels,
         routeForModel,
         boundaryObserver,
+        internalCapability,
       });
       return;
     }
@@ -626,6 +732,7 @@ export function createOpenAIEndpoint({
         anthropicError(response, 405, "invalid_request_error", "Only POST is allowed for this route.");
         return;
       }
+      if (rejectNonJsonInference(request, response, "claude")) return;
       proxyAnthropic(
         request,
         response,
@@ -634,6 +741,7 @@ export function createOpenAIEndpoint({
         allowedModels,
         routeForModel,
         boundaryObserver,
+        internalCapability,
       );
       return;
     }

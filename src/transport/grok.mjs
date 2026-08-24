@@ -1,10 +1,12 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { request as createHTTPSRequest } from "node:https";
 import { Transform, pipeline } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 import {
   readGrokAccessToken,
   refreshGrokOAuthSession,
+  sanitizeGrokChildEnvironment,
 } from "../core/grok-credentials.mjs";
 import {
   anthropicToResponses,
@@ -15,6 +17,8 @@ import {
 
 const LOOPBACK_HOST = "127.0.0.1";
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
+const MAX_INTERNAL_CAPABILITY_BYTES = 1_024;
+const MAX_PROMPT_CACHE_KEY_BYTES = 256;
 const MAX_UPSTREAM_RESPONSE_BYTES = 64 * 1024 * 1024;
 const UPSTREAM_HOST = "cli-chat-proxy.grok.com";
 const UPSTREAM_PATH = "/v1/responses";
@@ -29,6 +33,8 @@ const HOP_BY_HOP_HEADERS = new Set([
   "upgrade",
 ]);
 
+class InvalidRequestError extends Error {}
+
 function sendJson(response, status, body, headers = {}) {
   const payload = Buffer.from(JSON.stringify(body));
   response.writeHead(status, {
@@ -37,6 +43,62 @@ function sendJson(response, status, body, headers = {}) {
     ...headers,
   });
   response.end(payload);
+}
+
+function sendInvalidRequest(response, isAnthropic, message) {
+  if (isAnthropic) {
+    sendJson(response, 400, {
+      type: "error",
+      error: { type: "invalid_request_error", message },
+    });
+    return;
+  }
+  sendJson(response, 400, {
+    error: { type: "invalid_request_error", message },
+  });
+}
+
+function isObject(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function adapterRequestProblem(body, isAnthropic) {
+  if (!isObject(body)) return "Request body must be a JSON object.";
+  if (!isAnthropic) return null;
+  if (!Array.isArray(body.messages)) return "messages must be an array.";
+  if (body.messages.some((message) => !isObject(message))) {
+    return "Each message must be an object.";
+  }
+  if (body.tools !== undefined && !Array.isArray(body.tools)) {
+    return "tools must be an array.";
+  }
+  if (body.tools?.some((tool) => !isObject(tool))) {
+    return "Each tool must be an object.";
+  }
+  return null;
+}
+
+function promptCacheSessionID(body) {
+  if (!Object.hasOwn(body, "prompt_cache_key")) return randomUUID();
+  const value = body.prompt_cache_key;
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    Buffer.byteLength(value, "utf8") > MAX_PROMPT_CACHE_KEY_BYTES
+  ) {
+    throw new InvalidRequestError(
+      `prompt_cache_key must be a non-empty string of at most ${MAX_PROMPT_CACHE_KEY_BYTES} UTF-8 bytes.`,
+    );
+  }
+  return createHash("sha256").update(value, "utf8").digest("base64url");
+}
+
+function matchesInternalCapability(received, expected) {
+  if (typeof received !== "string") return false;
+  const receivedBytes = Buffer.from(received, "utf8");
+  const expectedBytes = Buffer.from(expected, "utf8");
+  return receivedBytes.length === expectedBytes.length &&
+    timingSafeEqual(receivedBytes, expectedBytes);
 }
 
 function jsonArguments(value) {
@@ -240,10 +302,11 @@ export function restoreGrokResponsesEvent(event, maps) {
 
 function createSSETransform(maps) {
   let pending = "";
+  const decoder = new StringDecoder("utf8");
   const customItemIDs = new Set();
   return new Transform({
     transform(chunk, _encoding, callback) {
-      pending += chunk.toString("utf8");
+      pending += decoder.write(chunk);
       const records = pending.split(/\r?\n\r?\n/);
       pending = records.pop() ?? "";
       for (const record of records) {
@@ -252,6 +315,7 @@ function createSSETransform(maps) {
       callback();
     },
     flush(callback) {
+      pending += decoder.end();
       if (pending) this.push(transformSSERecord(pending, maps, customItemIDs));
       callback();
     },
@@ -332,9 +396,14 @@ function parsedResponseFromSSE(payload, maps) {
         JSON.parse(line.slice(5).trim()),
         maps,
       );
-      if (event?.type === "response.completed") completed = event.response;
-      if (event?.type === "error") {
-        error = event.error ?? {
+      if (
+        event?.type === "response.completed" ||
+        event?.type === "response.incomplete"
+      ) {
+        completed = event.response;
+      }
+      if (event?.type === "response.failed" || event?.type === "error") {
+        error = event.error ?? event.response?.error ?? {
           type: "api_error",
           message: "xAI request failed",
         };
@@ -390,6 +459,17 @@ function upstreamRequest({
   return request;
 }
 
+function openUpstreamRequest(options, onError) {
+  try {
+    const request = upstreamRequest(options);
+    request.once("error", onError);
+    return request;
+  } catch (error) {
+    onError(error);
+    return null;
+  }
+}
+
 export function createGrokTransport({
   credentialPath,
   cliPath,
@@ -397,11 +477,54 @@ export function createGrokTransport({
   tokenProvider = readGrokAccessToken,
   refresh = refreshGrokOAuthSession,
   requestImpl = createHTTPSRequest,
+  cliEnvironment = process.env,
+  internalCapability,
   maximumUpstreamResponseBytes = MAX_UPSTREAM_RESPONSE_BYTES,
   log = () => {},
 }) {
+  if (
+    typeof internalCapability !== "string" ||
+    internalCapability.length === 0 ||
+    Buffer.byteLength(internalCapability, "utf8") > MAX_INTERNAL_CAPABILITY_BYTES ||
+    /[^\x21-\x7e]/.test(internalCapability)
+  ) {
+    throw new Error(
+      "Internal Grok transport capability must be a bounded header-safe string",
+    );
+  }
+  const childEnvironment = sanitizeGrokChildEnvironment(cliEnvironment);
+  let refreshInFlight = null;
+  const refreshSession = () => {
+    if (!refreshInFlight) {
+      refreshInFlight = Promise.resolve()
+        .then(() => refresh({ cliPath, env: childEnvironment }))
+        .finally(() => {
+          refreshInFlight = null;
+        });
+    }
+    return refreshInFlight;
+  };
+
   return createServer((request, response) => {
-    const url = new URL(request.url || "/", "http://127.0.0.1");
+    if (!matchesInternalCapability(request.headers["x-api-key"], internalCapability)) {
+      sendJson(response, 401, {
+        error: {
+          type: "authentication_error",
+          message: "Internal Grok transport authentication failed.",
+        },
+      });
+      return;
+    }
+
+    let url;
+    try {
+      url = new URL(request.url || "/", "http://127.0.0.1");
+    } catch {
+      sendJson(response, 400, {
+        error: { type: "invalid_request_error", message: "Request URL is invalid." },
+      });
+      return;
+    }
     const isResponses = url.pathname === "/v1/responses";
     const isAnthropic = url.pathname === "/v1/messages";
     const isTokenCount = url.pathname === "/v1/messages/count_tokens";
@@ -452,21 +575,45 @@ export function createGrokTransport({
         }
         return;
       }
-      if (isTokenCount) {
-        sendJson(response, 200, {
-          input_tokens: countAnthropicTokens(parsed),
-        });
+      const requestProblem = adapterRequestProblem(
+        parsed,
+        isAnthropic || isTokenCount,
+      );
+      if (requestProblem) {
+        sendInvalidRequest(response, isAnthropic || isTokenCount, requestProblem);
         return;
       }
-      const clientStream = parsed?.stream === true;
-      const prepared = prepareGrokResponsesRequest(
-        isAnthropic ? anthropicToResponses(parsed) : parsed,
-      );
-      const payload = Buffer.from(JSON.stringify(prepared.body));
-      const sessionID =
-        typeof parsed.prompt_cache_key === "string" && parsed.prompt_cache_key
-          ? parsed.prompt_cache_key
-          : randomUUID();
+      if (isTokenCount) {
+        try {
+          sendJson(response, 200, {
+            input_tokens: countAnthropicTokens(parsed),
+          });
+        } catch {
+          sendInvalidRequest(response, true, "Request body could not be processed.");
+        }
+        return;
+      }
+      let clientStream;
+      let prepared;
+      let payload;
+      let sessionID;
+      try {
+        clientStream = parsed.stream === true;
+        prepared = prepareGrokResponsesRequest(
+          isAnthropic ? anthropicToResponses(parsed) : parsed,
+        );
+        payload = Buffer.from(JSON.stringify(prepared.body));
+        sessionID = promptCacheSessionID(parsed);
+      } catch (error) {
+        sendInvalidRequest(
+          response,
+          isAnthropic,
+          error instanceof InvalidRequestError
+            ? error.message
+            : "Request body could not be processed.",
+        );
+        return;
+      }
       let activeUpstream = null;
       let retried = false;
 
@@ -498,7 +645,7 @@ export function createGrokTransport({
           fail(error);
           return;
         }
-        activeUpstream = upstreamRequest({
+        activeUpstream = openUpstreamRequest({
           payload,
           token,
           sessionID,
@@ -509,11 +656,12 @@ export function createGrokTransport({
               retried = true;
               upstream.resume();
               try {
-                refresh({ cliPath });
+                await refreshSession();
               } catch (error) {
                 fail(error);
                 return;
               }
+              if (response.destroyed || response.writableEnded) return;
               send();
               return;
             }
@@ -613,8 +761,7 @@ export function createGrokTransport({
               fail(error);
             }
           },
-        });
-        activeUpstream.once("error", fail);
+        }, fail);
       };
       const abortUpstream = () => {
         if (!response.writableFinished) activeUpstream?.destroy();

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import { readDevinSessionToken } from "../core/devin-credentials.mjs";
 import { gatewayEnvironmentValue } from "../core/environment.mjs";
@@ -59,6 +60,7 @@ async function startProvider(name, start, writeLog) {
 }
 
 export async function startBridge({ env = process.env, log, boundaryObserver } = {}) {
+  const providerProcessEnvironment = { ...env };
   const writeLog = log || ((message) => console.log(`[${publicName}] ${message}`));
   const port = parsePort(
     gatewayEnvironmentValue(env, "PORT") ?? 4317,
@@ -75,6 +77,7 @@ export async function startBridge({ env = process.env, log, boundaryObserver } =
   if (new Set([port, devinPort, grokPort]).size !== 3) {
     throw new Error("The public, Devin, and Grok ports must be different");
   }
+  const internalCapability = randomBytes(32).toString("base64url");
   const defaultModel =
     gatewayEnvironmentValue(env, "MODEL") ?? providerModels.devin[0];
   if (!supportedModels.includes(defaultModel)) {
@@ -97,6 +100,7 @@ export async function startBridge({ env = process.env, log, boundaryObserver } =
       return startDevinTransport({
         port: devinPort,
         token,
+        internalCapability,
         dataDir: paths.devinUpstreamDataDir,
         defaultModel: providerModels.devin[0],
         log: writeLog,
@@ -108,13 +112,15 @@ export async function startBridge({ env = process.env, log, boundaryObserver } =
       readGrokAccessToken(paths.grokCredentialsPath);
       const cliVersion = readGrokCLIVersion({
         cliPath: paths.grokCLIPath,
-        env,
+        env: providerProcessEnvironment,
       });
       return startGrokTransport({
         port: grokPort,
         credentialPath: paths.grokCredentialsPath,
         cliPath: paths.grokCLIPath,
         cliVersion,
+        cliEnvironment: providerProcessEnvironment,
+        internalCapability,
         log: writeLog,
       });
     }, writeLog),
@@ -136,6 +142,7 @@ export async function startBridge({ env = process.env, log, boundaryObserver } =
           isReady: () => providers.grok.server?.listening === true,
         },
       },
+      internalCapability,
       boundaryObserver,
       log: writeLog,
     });

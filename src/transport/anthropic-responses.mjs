@@ -1,4 +1,5 @@
 import { Transform } from "node:stream";
+import { StringDecoder } from "node:string_decoder";
 
 function systemText(system) {
   if (typeof system === "string") return system;
@@ -164,13 +165,13 @@ function responseTextParts(output) {
 }
 
 function stopReason(response, content) {
-  if (content.some((part) => part.type === "tool_use")) return "tool_use";
   if (
     response?.status === "incomplete" ||
     response?.incomplete_details?.reason === "max_output_tokens"
   ) {
     return "max_tokens";
   }
+  if (content.some((part) => part.type === "tool_use")) return "tool_use";
   return "end_turn";
 }
 
@@ -199,6 +200,7 @@ export function createAnthropicSSETransform({
   restoreEvent = (event) => event,
 } = {}) {
   let pending = "";
+  const decoder = new StringDecoder("utf8");
   let started = false;
   let nextBlock = 0;
   const textBlocks = new Map();
@@ -207,6 +209,7 @@ export function createAnthropicSSETransform({
   let model = "grok-4.5";
   let messageID = "msg_grok_bridge";
   let inputTokens = 0;
+  let terminal = false;
 
   const start = (stream, response = {}) => {
     if (started) return;
@@ -234,7 +237,7 @@ export function createAnthropicSSETransform({
   };
   const handle = (stream, rawEvent) => {
     const event = restoreEvent(rawEvent);
-    if (!event || typeof event !== "object") return;
+    if (!event || typeof event !== "object" || terminal) return;
     start(stream, event.response);
     if (event.type === "response.created" || event.type === "response.in_progress") {
       return;
@@ -310,7 +313,11 @@ export function createAnthropicSSETransform({
       stopBlock(stream, toolBlocks.get(event.item.id ?? event.item.call_id));
       return;
     }
-    if (event.type === "response.completed") {
+    if (
+      event.type === "response.completed" ||
+      event.type === "response.incomplete"
+    ) {
+      terminal = true;
       for (const index of [...openBlocks]) stopBlock(stream, index);
       const final = responsesToAnthropic(event.response);
       stream.push(anthropicEvent("message_delta", {
@@ -323,11 +330,13 @@ export function createAnthropicSSETransform({
       stream.push(anthropicEvent("message_stop", {}));
       return;
     }
-    if (event.type === "error") {
+    if (event.type === "response.failed" || event.type === "error") {
+      terminal = true;
+      const error = event.error ?? event.response?.error;
       stream.push(anthropicEvent("error", {
         error: {
-          type: event.error?.type ?? "api_error",
-          message: event.error?.message ?? "xAI request failed",
+          type: error?.type ?? "api_error",
+          message: error?.message ?? "xAI request failed",
         },
       }));
     }
@@ -335,7 +344,7 @@ export function createAnthropicSSETransform({
 
   return new Transform({
     transform(chunk, _encoding, callback) {
-      pending += chunk.toString("utf8");
+      pending += decoder.write(chunk);
       const lines = pending.split(/\r?\n/);
       pending = lines.pop() ?? "";
       for (const line of lines) {
@@ -347,7 +356,21 @@ export function createAnthropicSSETransform({
       callback();
     },
     flush(callback) {
+      pending += decoder.end();
+      if (pending.startsWith("data:")) {
+        try {
+          handle(this, JSON.parse(pending.slice(5).trim()));
+        } catch {}
+      }
       if (!started) start(this);
+      if (!terminal) {
+        this.push(anthropicEvent("error", {
+          error: {
+            type: "api_error",
+            message: "xAI stream ended without a terminal response event",
+          },
+        }));
+      }
       callback();
     },
   });

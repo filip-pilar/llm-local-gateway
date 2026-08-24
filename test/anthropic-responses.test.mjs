@@ -8,6 +8,18 @@ import {
   responsesToAnthropic,
 } from "../src/transport/anthropic-responses.mjs";
 
+async function translateSSE(input) {
+  const output = [];
+  await new Promise((resolve, reject) => {
+    Readable.from([input])
+      .pipe(createAnthropicSSETransform())
+      .on("data", (chunk) => output.push(chunk))
+      .once("end", resolve)
+      .once("error", reject);
+  });
+  return Buffer.concat(output).toString("utf8");
+}
+
 test("translates Anthropic system, tools, messages, and tool results to Responses", () => {
   const body = anthropicToResponses({
     model: "grok-4.5",
@@ -84,21 +96,80 @@ test("reconstructs canonical Anthropic SSE text and tool-use events", async () =
     'data: {"type":"response.completed","response":{"id":"resp_1","model":"grok-4.5","status":"completed","output":[{"type":"function_call","call_id":"tool_1","name":"lookup","arguments":"{\\"id\\":\\"A\\"}"}],"usage":{"input_tokens":3,"output_tokens":2}}}',
     "",
   ].join("\n");
-  const output = [];
-  await new Promise((resolve, reject) => {
-    Readable.from([input])
-      .pipe(createAnthropicSSETransform())
-      .on("data", (chunk) => output.push(chunk))
-      .once("end", resolve)
-      .once("error", reject);
-  });
-  const text = Buffer.concat(output).toString("utf8");
+  const text = await translateSSE(input);
 
   assert.match(text, /event: message_start/);
   assert.match(text, /"type":"text_delta","text":"Hi"/);
   assert.match(text, /"type":"tool_use","id":"tool_1","name":"lookup"/);
   assert.match(text, /"type":"input_json_delta","partial_json":"{\\"id\\":\\"A\\"}"/);
   assert.match(text, /event: message_stop/);
+});
+
+test("represents failed, incomplete, and missing Responses terminals honestly", async () => {
+  const failed = await translateSSE(
+    `data: ${JSON.stringify({
+      type: "response.failed",
+      response: {
+        id: "resp_failed",
+        model: "grok-4.5",
+        status: "failed",
+        error: { type: "server_error", message: "synthetic failure" },
+      },
+    })}\n\n`,
+  );
+  assert.match(failed, /event: error/);
+  assert.match(failed, /"type":"server_error"/);
+  assert.match(failed, /synthetic failure/);
+  assert.doesNotMatch(failed, /event: message_stop/);
+
+  const incomplete = await translateSSE(
+    [
+      `data: ${JSON.stringify({
+        type: "response.output_item.added",
+        item: {
+          id: "item_incomplete",
+          type: "function_call",
+          call_id: "call_incomplete",
+          name: "lookup",
+          arguments: "",
+        },
+      })}`,
+      `data: ${JSON.stringify({
+        type: "response.function_call_arguments.delta",
+        item_id: "item_incomplete",
+        delta: '{"id":',
+      })}`,
+      `data: ${JSON.stringify({
+        type: "response.incomplete",
+        response: {
+          id: "resp_incomplete",
+          model: "grok-4.5",
+          status: "incomplete",
+          incomplete_details: { reason: "max_output_tokens" },
+          output: [{
+            type: "function_call",
+            call_id: "call_incomplete",
+            name: "lookup",
+            arguments: '{"id":',
+          }],
+          usage: { input_tokens: 3, output_tokens: 5 },
+        },
+      })}`,
+      "",
+    ].join("\n"),
+  );
+  assert.match(incomplete, /"type":"tool_use"/);
+  assert.match(incomplete, /"partial_json":"{\\"id\\":"/);
+  assert.match(incomplete, /"stop_reason":"max_tokens"/);
+  assert.doesNotMatch(incomplete, /"stop_reason":"tool_use"/);
+  assert.match(incomplete, /event: message_stop/);
+  assert.doesNotMatch(incomplete, /event: error/);
+
+  const unterminated = await translateSSE(
+    'data: {"type":"response.created","response":{"id":"resp_cutoff"}}\n\n',
+  );
+  assert.match(unterminated, /event: error/);
+  assert.match(unterminated, /without a terminal response event/);
 });
 
 test("provides a bounded positive local token estimate", () => {

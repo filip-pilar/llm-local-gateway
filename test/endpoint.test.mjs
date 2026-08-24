@@ -7,9 +7,11 @@ import {
   buildAnthropicModelsResponse,
   createOpenAIEndpoint,
   startOpenAIEndpoint,
-  supportedModels,
 } from "../src/http/openai-endpoint.mjs";
-import { providerForModel } from "../src/core/providers.mjs";
+import {
+  providerForModel,
+  supportedModels,
+} from "../src/core/providers.mjs";
 import { prepareCodexChildRequest } from "../src/http/codex-child-compat.mjs";
 import { summarizeRequestBody } from "../src/http/boundary-instrumentation.mjs";
 
@@ -83,6 +85,38 @@ function requestWithDeclaredLength(port, length) {
   });
 }
 
+function sendRawJsonRequest(port, {
+  path = "/v1/responses",
+  headers = {},
+  body = { input: "hello" },
+} = {}) {
+  return new Promise((resolve, reject) => {
+    const request = createRequest({
+      host: "127.0.0.1",
+      port,
+      method: "POST",
+      path,
+      headers: {
+        "content-type": "application/json",
+        ...headers,
+      },
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => {
+        const rawBody = Buffer.concat(chunks).toString("utf8");
+        resolve({
+          status: response.statusCode,
+          headers: response.headers,
+          body: rawBody ? JSON.parse(rawBody) : null,
+        });
+      });
+    });
+    request.on("error", reject);
+    request.end(JSON.stringify(body));
+  });
+}
+
 test("publishes a minimal standard OpenAI model list", () => {
   const response = buildModelsResponse();
   assert.equal(response.object, "list");
@@ -107,6 +141,148 @@ test("refuses a non-loopback public binding", () => {
     () => startOpenAIEndpoint({ host: "0.0.0.0", port: 4317, upstreamPort: 4318 }),
     /must bind to 127\.0\.0\.1/,
   );
+});
+
+test("rejects non-loopback hosts and browser-origin requests before routing", async () => {
+  let upstreamRequests = 0;
+  const upstream = createServer((_request, response) => {
+    upstreamRequests += 1;
+    response.end("{}");
+  });
+  const upstreamPort = await listen(upstream);
+  const endpoint = createOpenAIEndpoint({ upstreamPort });
+  const port = await listen(endpoint);
+  try {
+    const hostileHost = await sendRawJsonRequest(port, {
+      headers: { host: "attacker.invalid" },
+    });
+    assert.equal(hostileHost.status, 400);
+    assert.equal(hostileHost.body.error.type, "invalid_host");
+
+    const browserOrigin = await sendRawJsonRequest(port, {
+      headers: { origin: "https://attacker.invalid" },
+    });
+    assert.equal(browserOrigin.status, 403);
+    assert.equal(browserOrigin.body.error.type, "browser_request_rejected");
+
+    const crossSite = await sendRawJsonRequest(port, {
+      headers: { "sec-fetch-site": "cross-site" },
+    });
+    assert.equal(crossSite.status, 403);
+    assert.equal(crossSite.body.error.type, "browser_request_rejected");
+    assert.equal(upstreamRequests, 0);
+  } finally {
+    await close(endpoint);
+    await close(upstream);
+  }
+});
+
+test("requires application/json for both inference protocols", async () => {
+  let upstreamRequests = 0;
+  const upstream = createServer((request, response) => {
+    upstreamRequests += 1;
+    request.resume();
+    request.once("end", () => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end("{}");
+    });
+  });
+  const upstreamPort = await listen(upstream);
+  const endpoint = createOpenAIEndpoint({ upstreamPort });
+  const port = await listen(endpoint);
+  try {
+    const openai = await sendRawJsonRequest(port, {
+      headers: { "content-type": "text/plain" },
+    });
+    assert.equal(openai.status, 415);
+    assert.equal(openai.body.error.type, "invalid_content_type");
+
+    const claude = await sendRawJsonRequest(port, {
+      path: "/claude/v1/messages",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: { model: "grok-4.5", messages: [] },
+    });
+    assert.equal(claude.status, 415);
+    assert.equal(claude.body.error.type, "invalid_request_error");
+    assert.equal(upstreamRequests, 0);
+
+    const charset = await sendRawJsonRequest(port, {
+      headers: { "content-type": "application/json; charset=utf-8" },
+    });
+    assert.equal(charset.status, 200);
+    assert.equal(upstreamRequests, 1);
+  } finally {
+    await close(endpoint);
+    await close(upstream);
+  }
+});
+
+test("contains synchronous Anthropic forwarding failures", async () => {
+  const endpoint = createOpenAIEndpoint({
+    providerRoutes: {
+      grok: {
+        get upstreamPort() {
+          throw new Error("synthetic route failure");
+        },
+      },
+    },
+  });
+  const port = await listen(endpoint);
+  try {
+    const result = await sendRawJsonRequest(port, {
+      path: "/claude/v1/messages",
+      body: { model: "grok-4.5", messages: [] },
+    });
+    assert.equal(result.status, 400);
+    assert.equal(result.body.error.type, "invalid_request_error");
+    assert.equal(
+      result.body.error.message,
+      "Messages request could not be forwarded safely.",
+    );
+
+    const stillRunning = await fetch(`http://127.0.0.1:${port}/v1/models`);
+    assert.equal(stillRunning.status, 200);
+  } finally {
+    await close(endpoint);
+  }
+});
+
+test("injects the internal capability and strips client authentication and CORS", async () => {
+  let receivedHeaders;
+  const upstream = createServer((request, response) => {
+    receivedHeaders = request.headers;
+    request.resume();
+    request.once("end", () => {
+      response.writeHead(200, {
+        "access-control-allow-origin": "*",
+        "access-control-expose-headers": "x-upstream",
+        "content-type": "application/json",
+        "x-upstream": "preserved",
+      });
+      response.end("{}");
+    });
+  });
+  const upstreamPort = await listen(upstream);
+  const internalCapability = "placeholder-internal-capability";
+  const endpoint = createOpenAIEndpoint({ upstreamPort, internalCapability });
+  const port = await listen(endpoint);
+  try {
+    const result = await sendRawJsonRequest(port, {
+      headers: {
+        authorization: "Bearer client-value",
+        "x-api-key": "client-value",
+      },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(receivedHeaders.authorization, undefined);
+    assert.equal(receivedHeaders["x-api-key"], internalCapability);
+    assert.equal(result.headers["access-control-allow-origin"], undefined);
+    assert.equal(result.headers["access-control-expose-headers"], undefined);
+    assert.equal(result.headers["x-upstream"], "preserved");
+  } finally {
+    await close(endpoint);
+    await close(upstream);
+  }
 });
 
 test("forwards direct Responses requests unchanged and injects only a missing model", async () => {

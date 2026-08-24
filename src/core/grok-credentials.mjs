@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import {
   closeSync,
   constants,
@@ -11,6 +11,32 @@ import { grokCredentialsPath } from "./paths.mjs";
 
 const GROK_OIDC_SCOPE =
   "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828";
+
+const EXCLUDED_GROK_CHILD_ENVIRONMENT_KEYS = new Set([
+  "API_KEY",
+  "DATA_DIR",
+  "DEBUG_REQUEST_BODIES",
+  "DEFAULT_MODEL",
+  "GROK_API_KEY",
+  "HOST",
+  "PORT",
+  "XAI_API_KEY",
+]);
+
+export function sanitizeGrokChildEnvironment(env = process.env) {
+  return Object.fromEntries(
+    Object.entries(env).filter(([key]) =>
+      !EXCLUDED_GROK_CHILD_ENVIRONMENT_KEYS.has(key) &&
+      !key.startsWith("ASTRAFLOW_") &&
+      !key.startsWith("CODEIUM_") &&
+      !key.startsWith("DASHBOARD_") &&
+      !key.startsWith("DEVIN_") &&
+      !key.startsWith("POLICY_BLOCK_") &&
+      !key.startsWith("WINDSURF_") &&
+      !key.startsWith("WINDSURFAPI_")
+    ),
+  );
+}
 
 export function readGrokAccessToken(path = grokCredentialsPath) {
   let descriptor;
@@ -52,28 +78,37 @@ export function readGrokAccessToken(path = grokCredentialsPath) {
 export function refreshGrokOAuthSession({
   cliPath,
   env = process.env,
-  run = spawnSync,
+  run = execFile,
 } = {}) {
   if (!cliPath) throw new Error("Official Grok CLI path is required");
-  const childEnv = { ...env };
-  delete childEnv.XAI_API_KEY;
-  delete childEnv.GROK_API_KEY;
-  const result = run(cliPath, ["--no-auto-update", "models"], {
-    encoding: "utf8",
-    env: childEnv,
-    timeout: 30_000,
-    maxBuffer: 64 * 1024,
-    windowsHide: true,
+  const childEnv = sanitizeGrokChildEnvironment(env);
+  return new Promise((resolve, reject) => {
+    const finish = (error) => {
+      if (!error) {
+        resolve();
+        return;
+      }
+      const reason =
+        error?.code === "ETIMEDOUT" || error?.killed || error?.signal
+          ? "timed out or was terminated"
+          : `failed with exit ${error?.code ?? "unknown"}`;
+      reject(new Error(
+        `The official Grok CLI could not refresh the xAI OAuth session: model discovery ${reason}. Run \`grok login\` again.`,
+      ));
+    };
+
+    try {
+      run(cliPath, ["--no-auto-update", "models"], {
+        encoding: "utf8",
+        env: childEnv,
+        timeout: 30_000,
+        maxBuffer: 64 * 1024,
+        windowsHide: true,
+      }, finish);
+    } catch (error) {
+      finish(error);
+    }
   });
-  if (result?.status !== 0) {
-    const reason =
-      result?.error?.code === "ETIMEDOUT" || result?.signal
-        ? "timed out or was terminated"
-        : `failed with exit ${result?.status ?? "unknown"}`;
-    throw new Error(
-      `The official Grok CLI could not refresh the xAI OAuth session: model discovery ${reason}. Run \`grok login\` again.`,
-    );
-  }
 }
 
 export function readGrokCLIVersion({
@@ -84,7 +119,7 @@ export function readGrokCLIVersion({
   if (!cliPath) throw new Error("Official Grok CLI path is required");
   const result = run(cliPath, ["version"], {
     encoding: "utf8",
-    env,
+    env: sanitizeGrokChildEnvironment(env),
     timeout: 5_000,
     maxBuffer: 16 * 1024,
     windowsHide: true,

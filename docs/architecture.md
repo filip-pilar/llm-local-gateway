@@ -10,9 +10,12 @@ One HTTP server binds to `127.0.0.1` and exposes:
 ```
 
 The public layer owns shared validation, model injection, deterministic
-routing, request-size and depth limits, client-auth stripping, streaming,
+routing, request-size and depth limits, browser-origin and non-loopback Host
+rejection, JSON content-type enforcement, client-auth stripping, streaming,
 cancellation, redacted boundary observations, and Codex/Claude child request
-compatibility.
+compatibility. It replaces any client `x-api-key` with one ephemeral capability
+shared only with the internal provider listeners and strips provider
+`Access-Control-*` response headers.
 
 The model is validated before any provider transport is contacted:
 
@@ -34,7 +37,10 @@ The Devin provider reuses the `devin-bridge` implementation:
 
 - reads `windsurf_api_key` from the official mode-0600 TOML credential;
 - reconciles private Windsurf account state under the gateway data directory;
-- starts the pinned `windsurf-api` server on its own loopback port;
+- starts the pinned `windsurf-api` server through its embedded modules on its
+  own authenticated loopback port;
+- disables raw request logging, tracing, wire dumps, system-prompt dumps, and
+  persisted policy samples;
 - preserves the existing Responses and Anthropic translations;
 - supports `swe-1-6-slow` and `swe-1-7-lightning`.
 
@@ -46,8 +52,10 @@ The Grok provider reuses the `grok-bridge` implementation:
   the refresh token;
 - verifies the official CLI version;
 - sends Responses requests to the fixed Grok CLI inference proxy;
-- on HTTP 401, asks the official CLI to refresh, rereads the token, and retries
-  once;
+- on HTTP 401, shares one asynchronous official-CLI refresh across waiting
+  requests, rereads the token, and retries each request once;
+- sanitizes the CLI child environment so Devin/Windsurf credentials and state
+  cannot cross the provider boundary;
 - adapts Anthropic requests and streams locally;
 - supports `grok-4.5`.
 
@@ -87,15 +95,18 @@ cancellation destroys only the selected upstream request.
 
 ## Trust and state
 
-All listeners are loopback-only. Public client auth headers are ignored and
-removed. Private directories are mode 0700; credentials and persisted account
-state are regular files with restrictive permissions and symbolic links are
-rejected.
+All listeners are loopback-only. The public server accepts only loopback Host
+values and rejects browser-origin or cross-site requests. Public client auth
+headers are ignored and removed; internal listeners accept only the ephemeral
+capability inserted by the public proxy. Private directories are mode 0700;
+credentials and persisted account state are regular files with restrictive
+permissions and symbolic links are rejected.
 
 The gateway logs state transitions and opaque error categories, never
-credential contents or request bodies. Boundary instrumentation stores hashes,
-counts, field shapes, event types, and tool metadata needed for compatibility
-diagnosis.
+credential contents or request bodies. Existing upstream policy samples are
+scrubbed at startup, and embedded provider body/trace/dump switches are forced
+off. Boundary instrumentation stores hashes, counts, field shapes, event types,
+and tool metadata needed for compatibility diagnosis.
 
 ## Source layout
 

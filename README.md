@@ -106,8 +106,17 @@ directory does not, the existing directory is reused automatically.
 ## Security and behavior
 
 - Public and internal listeners bind only to `127.0.0.1`.
+- The public boundary accepts only loopback `Host` values, rejects browser
+  origins and cross-site requests, and requires `application/json` for
+  inference POSTs.
 - Client `Authorization` and `x-api-key` headers are stripped before internal
-  forwarding.
+  forwarding. The public proxy replaces them with its ephemeral capability for
+  the internal provider listeners.
+- Provider CORS headers are never exposed through the public endpoint.
+- Grok adapter subprocess environments are sanitized, streamed UTF-8 is decoded
+  incrementally, and Grok shares one asynchronous CLI refresh across requests.
+- The embedded Devin transport disables raw body, prompt, trace, wire, and
+  policy-sample persistence.
 - Credential and private-state reads reject symbolic links and repair or reject
   unsafe permissions as appropriate.
 - Request validation, 10 MiB limits, streaming, cancellation, redacted boundary
