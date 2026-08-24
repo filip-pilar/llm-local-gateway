@@ -64,6 +64,12 @@ final class BridgeController: ObservableObject {
         }
     }
 
+    enum GatewayOwnership: Equatable {
+        case none
+        case owned
+        case external
+    }
+
     struct Feedback: Equatable {
         enum Kind: Equatable { case success, failure }
         let kind: Kind
@@ -72,8 +78,10 @@ final class BridgeController: ObservableObject {
     }
 
     @Published private(set) var state: State = .checking
+    @Published private(set) var gatewayOwnership: GatewayOwnership = .none
     @Published private(set) var endpointVerified = false
-    @Published private(set) var defaultModel: String
+    @Published private(set) var preferredDefaultModel: String
+    @Published private(set) var observedExternalDefaultModel: String?
     @Published private(set) var operation: Operation?
     @Published private(set) var feedback: Feedback?
     @Published private(set) var devinVersion = ""
@@ -84,7 +92,11 @@ final class BridgeController: ObservableObject {
     @Published private(set) var grokReady = false
     @Published var launchAtLogin = SMAppService.mainApp.status == .enabled
 
-    let paths = AppPaths.current
+    let paths: AppPaths
+    private let readinessInspector: @Sendable () async -> BridgeReadiness.Snapshot
+    private let helperInstaller: @Sendable (AppPaths) async throws -> Void
+    private let modelPreferenceSaver: (String) -> Void
+    private let loginTimeout: Duration
     private var devinCLI: DevinCLI?
     private var grokCLI: GrokCLI?
     private var bridgeProcess: Process?
@@ -95,14 +107,27 @@ final class BridgeController: ObservableObject {
     private var monitoringTask: Task<Void, Never>?
 
     var isBusy: Bool { operation != nil }
+    var isExternalGateway: Bool { gatewayOwnership == .external }
+    var canControlGateway: Bool { gatewayOwnership != .external }
     var logExists: Bool { FileManager.default.fileExists(atPath: paths.serviceLog.path) }
     var hasAuthenticatedProvider: Bool { devinAuthenticated || grokAuthenticated }
 
-    init() {
+    convenience init() {
         let saved = UserDefaults.standard.string(forKey: "defaultGatewayModel")
-        defaultModel = Self.supportedModels.contains(saved ?? "")
-            ? saved!
-            : "swe-1-6-slow"
+        self.init(
+            paths: .current,
+            defaultModel: Self.supportedModels.contains(saved ?? "")
+                ? saved!
+                : "swe-1-6-slow",
+            readinessInspector: {
+                await BridgeReadiness.inspect(port: BridgeController.publicPort)
+            },
+            helperInstaller: { paths in
+                try BridgeController.installBundledHelper(paths: paths)
+            },
+            loginTimeout: .seconds(300)
+        )
+        state = .checking
         Task { await bootstrap() }
         monitoringTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -111,6 +136,37 @@ final class BridgeController: ObservableObject {
                 await self.refreshObservedStatus()
             }
         }
+    }
+
+    init(
+        paths: AppPaths,
+        defaultModel: String = "swe-1-6-slow",
+        devinCLI: DevinCLI? = nil,
+        grokCLI: GrokCLI? = nil,
+        devinAuthenticated: Bool = false,
+        grokAuthenticated: Bool = false,
+        readinessInspector: @escaping @Sendable () async -> BridgeReadiness.Snapshot,
+        helperInstaller: @escaping @Sendable (AppPaths) async throws -> Void,
+        modelPreferenceSaver: @escaping (String) -> Void = {
+            UserDefaults.standard.set($0, forKey: "defaultGatewayModel")
+        },
+        loginTimeout: Duration = .seconds(300)
+    ) {
+        self.paths = paths
+        self.preferredDefaultModel = Self.supportedModels.contains(defaultModel)
+            ? defaultModel
+            : "swe-1-6-slow"
+        self.devinCLI = devinCLI
+        self.grokCLI = grokCLI
+        self.devinAuthenticated = devinAuthenticated
+        self.grokAuthenticated = grokAuthenticated
+        self.devinVersion = devinCLI?.version ?? ""
+        self.grokVersion = grokCLI?.version ?? ""
+        self.readinessInspector = readinessInspector
+        self.helperInstaller = helperInstaller
+        self.modelPreferenceSaver = modelPreferenceSaver
+        self.loginTimeout = loginTimeout
+        self.state = .stopped
     }
 
     func bootstrap() async {
@@ -211,6 +267,7 @@ final class BridgeController: ObservableObject {
     func dismissFeedback() { feedback = nil }
 
     func loginDevin() {
+        guard operation == nil, !isExternalGateway else { return }
         guard authProcess == nil, let cli = devinCLI else {
             if devinCLI == nil { openInstallInstructions("Devin") }
             return
@@ -233,6 +290,7 @@ final class BridgeController: ObservableObject {
     }
 
     func loginGrok() {
+        guard operation == nil, !isExternalGateway else { return }
         guard authProcess == nil, let cli = grokCLI else {
             if grokCLI == nil { openInstallInstructions("Grok") }
             return
@@ -263,6 +321,7 @@ final class BridgeController: ObservableObject {
                 self.loginTimeoutTask = nil
                 guard completed.terminationReason == .exit,
                       completed.terminationStatus == 0 else {
+                    self.operation = nil
                     self.recordFailure(
                         "\(provider) login did not complete",
                         detail: "The official \(provider) CLI exited before authentication succeeded."
@@ -270,7 +329,23 @@ final class BridgeController: ObservableObject {
                     return
                 }
                 await self.refreshAuthentication()
-                if self.hasAuthenticatedProvider {
+                guard self.isAuthenticated(provider) else {
+                    self.operation = nil
+                    self.recordFailure(
+                        "\(provider) login did not complete",
+                        detail: "The official \(provider) CLI did not report an authenticated session."
+                    )
+                    return
+                }
+                if self.isExternalGateway {
+                    await self.refreshObservedStatus()
+                    self.operation = nil
+                    self.feedback = Feedback(
+                        kind: .success,
+                        title: "\(provider) signed in",
+                        detail: "The externally managed gateway was not restarted."
+                    )
+                } else {
                     await self.configureAndStart(showSuccess: true)
                 }
             }
@@ -279,8 +354,9 @@ final class BridgeController: ObservableObject {
             try process.run()
             authProcess = process
             operation = .authenticating(provider)
+            let timeout = loginTimeout
             loginTimeoutTask = Task { [weak self, weak process] in
-                try? await Task.sleep(for: .seconds(300))
+                try? await Task.sleep(for: timeout)
                 guard !Task.isCancelled,
                       let self,
                       let process,
@@ -294,8 +370,13 @@ final class BridgeController: ObservableObject {
                 )
             }
         } catch {
+            operation = nil
             recordFailure("Could not start \(provider) login", error: error)
         }
+    }
+
+    private func isAuthenticated(_ provider: String) -> Bool {
+        provider == "Devin" ? devinAuthenticated : grokAuthenticated
     }
 
     func cancelLogin() {
@@ -312,14 +393,36 @@ final class BridgeController: ObservableObject {
         )
     }
 
-    private func configureAndStart(showSuccess: Bool) async {
+    private func configureAndStart(
+        showSuccess: Bool,
+        restartOwned: Bool = false
+    ) async {
         guard hasAuthenticatedProvider else {
+            operation = nil
             state = .stopped
             return
         }
+        let shouldOwnGateway = restartOwned || gatewayOwnership == .owned
         operation = .starting
         state = .starting
         feedback = nil
+        if !shouldOwnGateway {
+            let existing = await readinessInspector()
+            if existing.isGatewayIdentified {
+                gatewayOwnership = .external
+                apply(existing, observingExternal: true)
+                state = .running
+                if showSuccess {
+                    feedback = Feedback(
+                        kind: .success,
+                        title: "External gateway detected",
+                        detail: "Status is read-only because this app did not start it."
+                    )
+                }
+                operation = nil
+                return
+            }
+        }
         do {
             let paths = self.paths
             let requireDevin = devinAuthenticated
@@ -338,17 +441,18 @@ final class BridgeController: ObservableObject {
                         provider: "Grok"
                     )
                 }
-                try Self.installBundledHelper(paths: paths)
             }.value
-            let existing = await BridgeReadiness.inspect(port: Self.publicPort)
+            try await helperInstaller(paths)
             let snapshot: BridgeReadiness.Snapshot
-            if existing.isReady {
-                snapshot = existing
+            if shouldOwnGateway {
+                await stopOwnedBridgeProcess()
+                try await startBridgeProcess()
+                snapshot = try await waitForReadiness()
             } else {
                 try await startBridgeProcess()
                 snapshot = try await waitForReadiness()
             }
-            apply(snapshot)
+            apply(snapshot, observingExternal: false)
             state = .running
             if showSuccess {
                 feedback = Feedback(
@@ -358,7 +462,7 @@ final class BridgeController: ObservableObject {
                 )
             }
         } catch {
-            await stopBridgeProcess()
+            await stopOwnedBridgeProcess()
             recordFailure("Could not start the gateway", error: error)
         }
         operation = nil
@@ -468,7 +572,6 @@ final class BridgeController: ObservableObject {
     }
 
     private func startBridgeProcess() async throws {
-        await stopBridgeProcess()
         try Self.ensurePrivateDirectory(paths.dataDirectory)
         let logDescriptor = open(
             paths.serviceLog.path,
@@ -494,7 +597,7 @@ final class BridgeController: ObservableObject {
             "serve",
             "--parent-lifeline",
             "--model",
-            defaultModel,
+            preferredDefaultModel,
             "--port",
             String(Self.publicPort),
             "--devin-port",
@@ -521,7 +624,9 @@ final class BridgeController: ObservableObject {
                 guard let self, self.bridgeProcess === completed else { return }
                 self.bridgeProcess = nil
                 self.bridgeLifeline = nil
+                self.gatewayOwnership = .none
                 self.endpointVerified = false
+                self.observedExternalDefaultModel = nil
                 self.devinReady = false
                 self.grokReady = false
                 if !self.stoppingBridge {
@@ -537,11 +642,13 @@ final class BridgeController: ObservableObject {
         stoppingBridge = false
         bridgeProcess = process
         bridgeLifeline = lifeline
+        gatewayOwnership = .owned
+        observedExternalDefaultModel = nil
     }
 
     private func waitForReadiness() async throws -> BridgeReadiness.Snapshot {
         for _ in 0..<200 {
-            let snapshot = await BridgeReadiness.inspect(port: Self.publicPort)
+            let snapshot = await readinessInspector()
             if snapshot.isReady { return snapshot }
             if bridgeProcess?.isRunning != true { break }
             try? await Task.sleep(for: .milliseconds(100))
@@ -556,21 +663,26 @@ final class BridgeController: ObservableObject {
         )
     }
 
-    private func apply(_ snapshot: BridgeReadiness.Snapshot) {
+    private func apply(
+        _ snapshot: BridgeReadiness.Snapshot,
+        observingExternal: Bool
+    ) {
         endpointVerified = snapshot.isReady
         devinReady = snapshot.isProviderReady("devin")
         grokReady = snapshot.isProviderReady("grok")
-        if let model = snapshot.defaultModel,
-           Self.supportedModels.contains(model) {
-            defaultModel = model
-        }
+        observedExternalDefaultModel = observingExternal
+            ? snapshot.defaultModel
+            : nil
     }
 
-    private func stopBridgeProcess() async {
+    private func stopOwnedBridgeProcess() async {
+        guard gatewayOwnership == .owned else { return }
         stoppingBridge = true
         guard let process = bridgeProcess else {
             bridgeLifeline = nil
+            gatewayOwnership = .none
             endpointVerified = false
+            observedExternalDefaultModel = nil
             devinReady = false
             grokReady = false
             stoppingBridge = false
@@ -581,18 +693,20 @@ final class BridgeController: ObservableObject {
             bridgeProcess = nil
             bridgeLifeline = nil
         }
+        gatewayOwnership = .none
         endpointVerified = false
+        observedExternalDefaultModel = nil
         devinReady = false
         grokReady = false
         stoppingBridge = false
     }
 
     func stopBridge() {
-        guard operation == nil else { return }
+        guard operation == nil, gatewayOwnership == .owned else { return }
         operation = .stopping
         feedback = nil
         Task {
-            await stopBridgeProcess()
+            await stopOwnedBridgeProcess()
             state = .stopped
             operation = nil
             feedback = Feedback(
@@ -604,23 +718,30 @@ final class BridgeController: ObservableObject {
     }
 
     func startBridge() {
-        guard operation == nil else { return }
+        guard operation == nil, gatewayOwnership != .external else { return }
         Task { await configureAndStart(showSuccess: true) }
     }
 
     func selectDefaultModel(_ model: String) {
         guard Self.supportedModels.contains(model),
-              model != defaultModel,
-              operation == nil else { return }
-        defaultModel = model
-        UserDefaults.standard.set(model, forKey: "defaultGatewayModel")
-        if bridgeProcess?.isRunning == true {
-            Task { await configureAndStart(showSuccess: true) }
+              model != preferredDefaultModel,
+              operation == nil,
+              gatewayOwnership != .external else { return }
+        preferredDefaultModel = model
+        modelPreferenceSaver(model)
+        if gatewayOwnership == .owned {
+            Task {
+                await configureAndStart(
+                    showSuccess: true,
+                    restartOwned: true
+                )
+            }
         }
     }
 
     func verifyDirectRequest() {
-        guard operation == nil, endpointVerified else { return }
+        guard operation == nil, endpointVerified,
+              gatewayOwnership != .external else { return }
         operation = .verifying
         feedback = nil
         let helper = paths.stableHelper
@@ -685,37 +806,89 @@ final class BridgeController: ObservableObject {
     func logoutDevin() { logout(provider: "Devin") }
     func logoutGrok() { logout(provider: "Grok") }
 
+    private func logoutAndVerify(provider: String) async throws {
+        if provider == "Devin" {
+            let cli = devinCLI!
+            let status = try await Task.detached {
+                try cli.logout()
+                return cli.authStatus()
+            }.value
+            guard status == .signedOut else {
+                throw logoutVerificationError(provider)
+            }
+            devinAuthenticated = false
+        } else {
+            let cli = grokCLI!
+            let status = try await Task.detached {
+                try cli.logout()
+                return cli.authStatus()
+            }.value
+            guard status == .signedOut else {
+                throw logoutVerificationError(provider)
+            }
+            grokAuthenticated = false
+        }
+    }
+
+    private func logoutVerificationError(_ provider: String) -> NSError {
+        NSError(
+            domain: "LLMLocalGatewayApp",
+            code: 4,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "The official \(provider) CLI did not confirm a signed-out session.",
+            ]
+        )
+    }
+
     private func logout(provider: String) {
-        guard operation == nil else { return }
+        guard operation == nil, gatewayOwnership != .external else { return }
         if provider == "Devin", devinCLI == nil { return }
         if provider == "Grok", grokCLI == nil { return }
+        let restoreOwnedGateway = gatewayOwnership == .owned
         operation = .loggingOut(provider)
         feedback = nil
         Task {
-            await stopBridgeProcess()
+            if restoreOwnedGateway {
+                await stopOwnedBridgeProcess()
+            }
             do {
-                if provider == "Devin" {
-                    let cli = devinCLI!
-                    try await Task.detached { try cli.logout() }.value
+                try await logoutAndVerify(provider: provider)
+                operation = nil
+                if restoreOwnedGateway, hasAuthenticatedProvider {
+                    await configureAndStart(
+                        showSuccess: false,
+                        restartOwned: true
+                    )
+                    guard gatewayOwnership == .owned, endpointVerified else {
+                        return
+                    }
                 } else {
-                    let cli = grokCLI!
-                    try await Task.detached { try cli.logout() }.value
+                    state = .stopped
                 }
-                await refreshAuthentication()
                 feedback = Feedback(
                     kind: .success,
                     title: "Logged out of \(provider)",
                     detail: "Provider credentials remain owned by the official CLI."
                 )
-                operation = nil
-                if hasAuthenticatedProvider {
-                    await configureAndStart(showSuccess: false)
-                } else {
-                    state = .stopped
-                }
             } catch {
                 operation = nil
-                recordFailure("\(provider) logout failed", error: error)
+                if restoreOwnedGateway {
+                    await configureAndStart(
+                        showSuccess: false,
+                        restartOwned: true
+                    )
+                    guard gatewayOwnership == .owned, endpointVerified else {
+                        return
+                    }
+                    recordFailure(
+                        "\(provider) logout failed",
+                        error: error,
+                        changeGatewayState: false
+                    )
+                } else {
+                    recordFailure("\(provider) logout failed", error: error)
+                }
             }
         }
     }
@@ -751,15 +924,27 @@ final class BridgeController: ObservableObject {
     }
 
     private func refreshObservedStatus() async {
-        let snapshot = await BridgeReadiness.inspect(port: Self.publicPort)
-        apply(snapshot)
-        if snapshot.isReady {
+        let snapshot = await readinessInspector()
+        if gatewayOwnership == .owned {
+            apply(snapshot, observingExternal: false)
+            if !snapshot.isReady,
+               bridgeProcess?.isRunning == true,
+               state == .running {
+                recordFailure(
+                    "Gateway endpoint is unavailable",
+                    detail: "The supervised helper is running but its endpoint is unavailable."
+                )
+            }
+        } else if snapshot.isGatewayIdentified {
+            gatewayOwnership = .external
+            apply(snapshot, observingExternal: true)
             state = .running
-        } else if bridgeProcess?.isRunning != true, state == .running {
-            recordFailure(
-                "Gateway endpoint is unavailable",
-                detail: "The supervised helper is not running. Start it again or open the log."
-            )
+        } else {
+            apply(snapshot, observingExternal: false)
+            if gatewayOwnership == .external {
+                state = .stopped
+            }
+            gatewayOwnership = .none
         }
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
@@ -788,7 +973,7 @@ final class BridgeController: ObservableObject {
         loginTimeoutTask = nil
         process?.terminate()
         Task {
-            await stopBridgeProcess()
+            await stopOwnedBridgeProcess()
             NSApplication.shared.terminate(nil)
         }
     }

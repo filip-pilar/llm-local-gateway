@@ -64,7 +64,17 @@ struct GrokCLI: Sendable {
                 ? .authenticated
                 : .failed("This xAI OAuth account does not list Grok 4.5.")
         }
-        return .signedOut
+        let output = (result.stdout + "\n" + result.stderr)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let signedOutMarkers = [
+            "not signed in",
+            "no cached credentials found",
+            "you are not authenticated",
+        ]
+        if signedOutMarkers.contains(where: output.localizedCaseInsensitiveContains) {
+            return .signedOut
+        }
+        return .failed("Credential-opaque Grok model discovery failed.")
     }
 
     func logout() throws {

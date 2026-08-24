@@ -88,7 +88,14 @@ private struct GatewayPanel: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("LLM Local Gateway")
                     .font(.headline)
-                Text(controller.operation?.label ?? controller.state.label)
+                Text(
+                    controller.operation?.label
+                        ?? (
+                            controller.isExternalGateway
+                                ? "External gateway · read only"
+                                : controller.state.label
+                        )
+                )
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -105,16 +112,26 @@ private struct GatewayPanel: View {
         VStack(spacing: 0) {
             row("Gateway", icon: "bolt.horizontal.fill") {
                 statusLabel(
-                    controller.endpointVerified ? "Running" : "Stopped",
+                    controller.isExternalGateway
+                        ? "External"
+                        : controller.endpointVerified ? "Running" : "Stopped",
                     positive: controller.endpointVerified
                 )
-                Button(
-                    controller.endpointVerified ? "Stop" : "Start",
-                    action: controller.endpointVerified
-                        ? controller.stopBridge
-                        : controller.startBridge
-                )
-                .disabled(controller.isBusy || !controller.hasAuthenticatedProvider)
+                if controller.isExternalGateway {
+                    Text("Read only")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button(
+                        controller.endpointVerified ? "Stop" : "Start",
+                        action: controller.endpointVerified
+                            ? controller.stopBridge
+                            : controller.startBridge
+                    )
+                    .disabled(
+                        controller.isBusy || !controller.hasAuthenticatedProvider
+                    )
+                }
             }
             sectionDivider
             row("OpenAI", icon: "arrow.trianglehead.branch") {
@@ -131,22 +148,31 @@ private struct GatewayPanel: View {
                 }
             }
             sectionDivider
-            row("Default", icon: "cpu") {
-                Picker(
-                    "Default model",
-                    selection: Binding(
-                        get: { controller.defaultModel },
-                        set: controller.selectDefaultModel
-                    )
-                ) {
-                    Text("SWE-1.6 Slow · Devin").tag("swe-1-6-slow")
-                    Text("SWE-1.7 Lightning · Devin").tag("swe-1-7-lightning")
-                    Text("Grok 4.5 · Grok").tag("grok-4.5")
+            row(
+                controller.isExternalGateway ? "External default" : "Default",
+                icon: "cpu"
+            ) {
+                if controller.isExternalGateway {
+                    Text(controller.observedExternalDefaultModel ?? "Unknown")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker(
+                        "Default model",
+                        selection: Binding(
+                            get: { controller.preferredDefaultModel },
+                            set: controller.selectDefaultModel
+                        )
+                    ) {
+                        Text("SWE-1.6 Slow · Devin").tag("swe-1-6-slow")
+                        Text("SWE-1.7 Lightning · Devin").tag("swe-1-7-lightning")
+                        Text("Grok 4.5 · Grok").tag("grok-4.5")
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 205)
+                    .disabled(controller.isBusy)
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 205)
-                .disabled(controller.isBusy)
             }
         }
         .padding(.horizontal, 16)
@@ -218,10 +244,10 @@ private struct GatewayPanel: View {
             }
             if authenticated {
                 Button("Log Out") { logoutProvider = name }
-                    .disabled(controller.isBusy)
+                    .disabled(controller.isBusy || !controller.canControlGateway)
             } else {
                 Button(version.isEmpty ? "Install" : "Sign In", action: login)
-                    .disabled(controller.isBusy)
+                    .disabled(controller.isBusy || !controller.canControlGateway)
             }
         }
     }
@@ -265,7 +291,11 @@ private struct GatewayPanel: View {
                 systemImage: "checkmark.seal",
                 action: controller.verifyDirectRequest
             )
-            .disabled(!controller.endpointVerified || controller.isBusy)
+            .disabled(
+                !controller.endpointVerified
+                    || controller.isBusy
+                    || !controller.canControlGateway
+            )
             .help("Makes bounded live OpenAI and Claude requests")
             Button("Log", systemImage: "doc.text.magnifyingglass") {
                 controller.openLog()

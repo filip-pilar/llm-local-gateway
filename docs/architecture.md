@@ -124,10 +124,13 @@ macos/LLMLocalGatewayApp            native menu-bar controller
 bin/build-macos-app.mjs             signed local app packaging
 ```
 
-The native app bundles the same compiled helper, supervises it with a parent
-lifeline, and surfaces independent authentication and readiness for both
-providers. Its explicit verification action makes bounded real OpenAI and
-Claude requests only for ready providers.
+The native app bundles the same compiled helper, supervises app-owned helpers
+with a parent lifeline, and surfaces independent authentication and readiness
+for both providers. An externally started gateway is observed read-only and is
+never stopped or reconfigured by the app, including while none of its providers
+are ready. The app displays that gateway's observed default separately from its
+saved preference for app-owned helpers. Its explicit verification action makes
+bounded real OpenAI and Claude requests only for ready app-owned providers.
 
 The first release deliberately omits generic plugins, automatic provider
 fallback, and remote binding.

@@ -162,7 +162,10 @@ the authenticated Devin account is entitled to the Lightning model.
 The unified menu-bar app supervises the same loopback helper and keeps Devin
 and Grok sign-in, status, readiness, and logout independent. It exposes both
 endpoint URLs, supports all three default models, can launch at login, and has
-an explicit bounded live-verification action.
+an explicit bounded live-verification action. A gateway started outside the app
+is displayed as external and read-only; the app never claims it can stop or
+reconfigure that process. External status shows the observed gateway default
+without replacing the app's saved preference for its own helper.
 
 Build signed local app bundles:
 
