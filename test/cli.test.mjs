@@ -3,30 +3,22 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-const commands = [
-  "llm-local-gateway.mjs",
-  "doctor.mjs",
-  "smoke.mjs",
-];
+const cliPath = fileURLToPath(new URL("../bin/llm-local-gateway.mjs", import.meta.url));
 
-test("every public CLI exposes a side-effect-free help path", () => {
-  for (const command of commands) {
-    const result = spawnSync(
-      process.execPath,
-      [fileURLToPath(new URL(`../bin/${command}`, import.meta.url)), "--help"],
-      { encoding: "utf8" },
-    );
-    assert.equal(result.status, 0, `${command}: ${result.stderr}`);
-    assert.match(result.stdout, /^Usage:/, command);
-    assert.equal(result.stderr, "", command);
-  }
+test("the public CLI exposes a side-effect-free help path", () => {
+  const result = spawnSync(process.execPath, [cliPath, "--help"], {
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^Usage:/);
+  assert.equal(result.stderr, "");
 });
 
 test("serve CLI rejects an invalid custom port before reading authentication", () => {
   const result = spawnSync(
     process.execPath,
     [
-      fileURLToPath(new URL("../bin/llm-local-gateway.mjs", import.meta.url)),
+      cliPath,
       "serve",
       "--port",
       "0",
@@ -40,7 +32,7 @@ test("serve CLI rejects an invalid custom port before reading authentication", (
 test("smoke rejects invalid network settings before reading bridge state", () => {
   const result = spawnSync(
     process.execPath,
-    [fileURLToPath(new URL("../bin/smoke.mjs", import.meta.url))],
+    [cliPath, "smoke"],
     {
       encoding: "utf8",
       env: { ...process.env, LLM_LOCAL_GATEWAY_PORT: "0" },
@@ -53,19 +45,9 @@ test("smoke rejects invalid network settings before reading bridge state", () =>
 test("unified CLI rejects unknown commands without side effects", () => {
   const result = spawnSync(
     process.execPath,
-    [fileURLToPath(new URL("../bin/llm-local-gateway.mjs", import.meta.url)), "not-a-command"],
+    [cliPath, "not-a-command"],
     { encoding: "utf8" },
   );
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Unknown command: not-a-command/);
-});
-
-test("the obsolete endpoint key command is not available", () => {
-  const result = spawnSync(
-    process.execPath,
-    [fileURLToPath(new URL("../bin/llm-local-gateway.mjs", import.meta.url)), "key"],
-    { encoding: "utf8" },
-  );
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /Unknown command: key/);
 });

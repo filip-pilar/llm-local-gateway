@@ -19,7 +19,7 @@
     "check": "node bin/check.mjs",
     "status": "node bin/llm-local-gateway.mjs status",
     "status:live": "node bin/llm-local-gateway.mjs status --live",
-    "smoke": "node bin/smoke.mjs",
+    "smoke": "node bin/llm-local-gateway.mjs smoke",
     "spike:grok-auth": "node bin/grok-auth-spike.mjs",
     "test": "node --test test/*.test.mjs",
     "test:contracts": "node --test test/contracts.test.mjs",

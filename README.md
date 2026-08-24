@@ -185,8 +185,7 @@ Build only the standalone helper:
 bun run build:helper
 ```
 
-See [architecture](docs/architecture.md) and
-[consolidation notes](docs/consolidation.md).
+See [architecture](docs/architecture.md).
 
 ## License
 
