@@ -1,7 +1,9 @@
 # llm-local-gateway
 
-`llm-local-gateway` exposes authenticated Devin and Grok CLI subscriptions
-through one loopback-only daemon:
+Use authenticated Devin and Grok CLI subscriptions through one local OpenAI-
+and Anthropic-compatible API.
+
+The loopback-only daemon exposes these endpoints:
 
 - OpenAI-compatible base URL: `http://127.0.0.1:4317/openai/v1`
 - Anthropic-compatible base URL: `http://127.0.0.1:4317/claude`

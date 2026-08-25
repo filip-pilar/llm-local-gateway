@@ -1,7 +1,7 @@
 {
   "name": "llm-local-gateway",
   "version": "0.1.0",
-  "description": "Route Devin and Grok CLI subscriptions through one loopback OpenAI- and Anthropic-compatible gateway.",
+  "description": "Use authenticated Devin and Grok CLI subscriptions through one local OpenAI- and Anthropic-compatible API.",
   "private": true,
   "license": "MIT",
   "repository": {
