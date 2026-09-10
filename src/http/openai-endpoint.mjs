@@ -1,5 +1,6 @@
 import { createServer, request as createRequest } from "node:http";
 import { pipeline } from "node:stream";
+import { modelOptionsError } from "./model-options.mjs";
 import {
   providerForModel,
   supportedModels,
@@ -370,6 +371,11 @@ function forwardResponses({
     });
     return;
   }
+  const optionsError = modelOptionsError(parsed);
+  if (optionsError) {
+    sendJson(response, 400, { error: { type: "invalid_request_error", message: optionsError } });
+    return;
+  }
   if (payload.length > MAX_RESPONSES_BODY_BYTES) {
     sendJson(response, 413, {
       error: {
@@ -541,6 +547,11 @@ function proxyAnthropic(
       const withModel = body.model == null || body.model === ""
         ? { ...body, model: defaultModel }
         : body;
+      const optionsError = modelOptionsError(withModel);
+      if (optionsError) {
+        anthropicError(response, 400, "invalid_request_error", optionsError);
+        return;
+      }
       const prepared = prepareClaudeChildRequest(request.headers, withModel);
       const changed = prepared.changed || withModel !== body;
       const payload = changed ? Buffer.from(JSON.stringify(prepared.body)) : original;

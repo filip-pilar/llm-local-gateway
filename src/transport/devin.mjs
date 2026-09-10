@@ -23,7 +23,19 @@ const privacyEnvironment = {
   WINDSURFAPI_PROTO_TRACE_READ_WRAPPER_STRINGS: "0",
   WINDSURFAPI_PROTO_TRACE_STRINGS: "0",
   WINDSURFAPI_TRACE: "0",
+  WINDSURFAPI_VARIANT_FALLBACK_ON_RATE_LIMIT: "0",
 };
+
+export async function refreshDevinCatalog({ token, fetchCatalog, setLiveCatalogSelectors }) {
+  try {
+    const catalog = await fetchCatalog({ token, signal: AbortSignal.timeout(15_000) });
+    setLiveCatalogSelectors(catalog);
+    return true;
+  } catch {
+    // Unknown selectors still fail closed at the transport's model gate.
+    return false;
+  }
+}
 
 async function waitForInternalServer(getActiveServer, port, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
@@ -73,11 +85,15 @@ async function loadWindsurfServer(internalCapability) {
     { startServer },
     { registerServer },
     { log: upstreamLog },
+    { fetchCatalog },
+    { setLiveCatalogSelectors },
   ] = await Promise.all([
     import("windsurf-api/src/auth.js"),
     import("windsurf-api/src/server.js"),
     import("windsurf-api/src/server-registry.js"),
     import("windsurf-api/src/config.js"),
+    import("windsurf-api/src/devin-connect-catalog.js"),
+    import("windsurf-api/src/devin-connect-models.js"),
   ]);
   // server.js imports the dashboard's persistent logger. Replace its shared
   // methods before startup so embedded requests cannot print or append bodies.
@@ -86,6 +102,12 @@ async function loadWindsurfServer(internalCapability) {
   }
   setApiKeyResolver(() => internalCapability);
   await initAuth();
+  // The pinned transport refreshes Connect selectors in the background, only
+  // after a separate Cascade catalog succeeds. Fetch the authoritative Devin
+  // catalog independently before serving, so newly released selectors work on
+  // the first request. A discovery outage must not disable the older models
+  // already present in the transport's bundled snapshot.
+  await refreshDevinCatalog({ token: process.env.CODEIUM_API_KEY, fetchCatalog, setLiveCatalogSelectors });
   const server = startServer();
   protectInternalServer(server, internalCapability);
   registerServer(server);
@@ -137,7 +159,7 @@ export async function startDevinTransport({
     HOST: host,
     PORT: String(port),
     WINDSURFAPI_ALLOW_UNAUTHENTICATED: "0",
-    WINDSURFAPI_NO_OPEN: "1",
+  WINDSURFAPI_NO_OPEN: "1",
     WINDSURFAPI_SKIP_DOTENV: "1",
   });
 

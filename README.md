@@ -20,10 +20,13 @@ Routing is fixed by model ID. There is no fallback.
 | --- | --- |
 | `swe-1-6-slow` | Devin |
 | `swe-1-7-lightning` | Devin |
+| `swe-2-medium` | Devin |
+| `swe-2-high` | Devin |
+| `swe-2-max` | Devin |
 | `grok-4.5` | Grok |
 
 Requests with a missing or empty `model` use `LLM_LOCAL_GATEWAY_MODEL`, which
-defaults to `swe-1-6-slow`. Both model-list endpoints always publish all three
+defaults to `swe-1-6-slow`. Both model-list endpoints always publish all six
 models.
 
 ## Requirements
@@ -59,6 +62,50 @@ bun run llm-local-gateway -- help
 bun run llm-local-gateway -- smoke --model swe-1-6-slow
 bun run llm-local-gateway -- smoke --model grok-4.5 --protocol claude
 ```
+
+## Claude Code with SWE-2
+
+Authenticate the official CLI with the account that has SWE-2 access:
+
+```bash
+devin auth login
+```
+
+Start the gateway in one terminal:
+
+```bash
+bun run llm-local-gateway -- serve
+```
+
+From your working project directory, launch Claude Code in another terminal:
+
+```bash
+node /absolute/path/to/llm-local-gateway/bin/claude-swe2.mjs medium
+```
+
+Use `high` or `max` instead of `medium` to select another effort. Additional
+Claude arguments follow the effort, for example `medium --print "Explain this
+project"`. Set `LLM_LOCAL_GATEWAY_PORT` if the gateway uses a different port.
+The launcher checks gateway readiness, selects the same model for Claude's
+main, small, and child requests, and uses a temporary Claude configuration.
+It omits everyday user/project settings, plugins, and MCP servers, preserves
+normal Claude permission prompts, and removes the temporary configuration on
+exit. Sessions in this isolated configuration are temporary. It does not alter
+your normal Claude or router settings or start/stop the gateway.
+
+The exact upstream IDs are `swe-2-medium`, `swe-2-high`, and `swe-2-max`.
+The gateway intentionally does not expose the moving `swe` alias or a bare
+`swe-2` alias. Separate `output_config.effort`, `reasoning.effort`, or
+`reasoning_effort` values must match the selected variant. Unsupported levels,
+conflicting overrides, disabled thinking, and explicit thinking token budgets
+return HTTP 400; adaptive thinking is accepted. Select another variant by
+changing the model ID.
+
+SWE-2 requires an entitled Devin login. Model discovery and provider readiness
+are not inference verification. The official CLI can show promotional free
+pricing for an eligible account; this does not establish billing for proxied
+requests. See [SWE-2 verification](docs/swe-2-verification.md) for the tested
+versions, upstream evidence, and live checks.
 
 ## Routes
 
@@ -163,7 +210,7 @@ the authenticated Devin account is entitled to the Lightning model.
 
 The unified menu-bar app supervises the same loopback helper and keeps Devin
 and Grok sign-in, status, readiness, and logout independent. It exposes both
-endpoint URLs, supports all three default models, can launch at login, and has
+endpoint URLs, supports all six default models, can launch at login, and has
 an explicit bounded live-verification action. A gateway started outside the app
 is displayed as external and read-only; the app never claims it can stop or
 reconfigure that process. External status shows the observed gateway default

@@ -21,7 +21,10 @@ The model is validated before any provider transport is contacted:
 
 ```text
 swe-1-6-slow      ─┐
-swe-1-7-lightning ─┴─> Devin loopback transport
+swe-1-7-lightning ─┤
+swe-2-medium     ─┤
+swe-2-high       ─┤
+swe-2-max        ─┴─> Devin loopback transport
 
 grok-4.5          ────> Grok loopback transport
 ```
@@ -42,7 +45,18 @@ The Devin provider reuses the `devin-bridge` implementation:
 - disables raw request logging, tracing, wire dumps, system-prompt dumps, and
   persisted policy samples;
 - preserves the existing Responses and Anthropic translations;
-- supports `swe-1-6-slow` and `swe-1-7-lightning`.
+- loads the live Devin Connect catalog before listening, independently of the
+  transport's background Cascade catalog; discovery failure retains the bundled
+  catalog and unknown selectors fail closed;
+- disables the transport's automatic rate-limit variant fallback;
+- supports `swe-1-6-slow`, `swe-1-7-lightning`, and the exact SWE-2 selectors
+  `swe-2-medium`, `swe-2-high`, and `swe-2-max`.
+
+The public boundary rejects SWE-2 effort overrides that differ from the selected
+model, unsupported effort levels, disabled thinking, and explicit thinking
+budgets. Matching effort fields and adaptive thinking are accepted. Reasoning
+effort is encoded in the upstream selector; the gateway never substitutes
+another variant.
 
 ### Grok
 
@@ -76,7 +90,7 @@ stable provider-unavailable error for models owned by the failed provider.
   "ready": true,
   "default_model": "swe-1-6-slow",
   "providers": {
-    "devin": { "ready": true, "models": ["swe-1-6-slow", "swe-1-7-lightning"] },
+    "devin": { "ready": true, "models": ["swe-1-6-slow", "swe-1-7-lightning", "swe-2-medium", "swe-2-high", "swe-2-max"] },
     "grok": { "ready": false, "models": ["grok-4.5"] }
   }
 }

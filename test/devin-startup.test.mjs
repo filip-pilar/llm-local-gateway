@@ -34,6 +34,7 @@ const upstreamEnvironmentKeys = [
   "WINDSURFAPI_PROTO_TRACE_STRINGS",
   "WINDSURFAPI_SKIP_DOTENV",
   "WINDSURFAPI_TRACE",
+  "WINDSURFAPI_VARIANT_FALLBACK_ON_RATE_LIMIT",
 ];
 
 const internalCapability = "fixture-internal-capability";
@@ -158,6 +159,7 @@ test("Devin startup reconciles state and configures the pinned upstream", async 
     assert.equal(process.env.PORT, "4318");
     assert.equal(process.env.WINDSURFAPI_ALLOW_UNAUTHENTICATED, "0");
     assert.equal(process.env.POLICY_BLOCK_RING, "-1");
+    assert.equal(process.env.WINDSURFAPI_VARIANT_FALLBACK_ON_RATE_LIMIT, "0");
     assert.equal(process.env.LOG_LEVEL, "error");
     for (const key of [
       "DEBUG_REQUEST_BODIES",
@@ -170,6 +172,7 @@ test("Devin startup reconciles state and configures the pinned upstream", async 
       "WINDSURFAPI_PROTO_TRACE_READ_WRAPPER_STRINGS",
       "WINDSURFAPI_PROTO_TRACE_STRINGS",
       "WINDSURFAPI_TRACE",
+  "WINDSURFAPI_VARIANT_FALLBACK_ON_RATE_LIMIT",
     ]) {
       assert.equal(process.env[key], "0", key);
     }

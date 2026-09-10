@@ -8,6 +8,9 @@ final class BridgeController: ObservableObject {
     nonisolated static let supportedModels = [
         "swe-1-6-slow",
         "swe-1-7-lightning",
+        "swe-2-medium",
+        "swe-2-high",
+        "swe-2-max",
         "grok-4.5",
     ]
     nonisolated static let publicPort: Int = {

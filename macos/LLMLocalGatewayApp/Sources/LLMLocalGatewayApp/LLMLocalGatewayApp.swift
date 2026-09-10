@@ -166,6 +166,9 @@ private struct GatewayPanel: View {
                     ) {
                         Text("SWE-1.6 Slow · Devin").tag("swe-1-6-slow")
                         Text("SWE-1.7 Lightning · Devin").tag("swe-1-7-lightning")
+                        Text("SWE-2 Medium · Devin").tag("swe-2-medium")
+                        Text("SWE-2 High · Devin").tag("swe-2-high")
+                        Text("SWE-2 Max · Devin").tag("swe-2-max")
                         Text("Grok 4.5 · Grok").tag("grok-4.5")
                     }
                     .labelsHidden()

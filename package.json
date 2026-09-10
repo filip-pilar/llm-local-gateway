@@ -25,7 +25,8 @@
     "test:contracts": "node --test test/contracts.test.mjs",
     "test:coverage": "node --test --experimental-test-coverage test/*.test.mjs",
     "test:live-providers": "node test/support/run-live-provider-conformance.mjs",
-    "test:native": "node bin/test-native.mjs"
+    "test:native": "node bin/test-native.mjs",
+    "test:live-swe2": "node test/support/run-live-swe2.mjs"
   },
   "bin": {
     "llm-local-gateway": "bin/llm-local-gateway.mjs"
@@ -35,5 +36,8 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "patchedDependencies": {
+    "windsurf-api@github:dwgx/WindsurfAPI#81370f5": "patches/windsurf-api-swe2-tool-history.patch"
   }
 }

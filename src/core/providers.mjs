@@ -2,6 +2,9 @@ export const providerModels = Object.freeze({
   devin: Object.freeze([
     "swe-1-6-slow",
     "swe-1-7-lightning",
+    "swe-2-medium",
+    "swe-2-high",
+    "swe-2-max",
   ]),
   grok: Object.freeze([
     "grok-4.5",

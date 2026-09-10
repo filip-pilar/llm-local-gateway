@@ -1,0 +1,65 @@
+--- a/src/devin-connect.js
++++ b/src/devin-connect.js
+@@ -693,6 +693,51 @@
+  * @param {object}   [params.completion]  CompletionConfig overrides
+  * @returns {Buffer} raw protobuf (un-enveloped)
+  */
++// SWE-2's native history requires each tool result immediately after its call.
++// Anthropic/OpenAI parallel batches otherwise become call A, call B, result A,
++// result B on this wire and fail with an invalid_argument trailer. Pair only
++// complete, unambiguous batches; retain all original content and result blocks.
++export function pairSwe2ToolHistory(messages) {
++  const source = messages || [];
++  const out = [];
++  for (let i = 0; i < source.length;) {
++    let end = i;
++    const calls = [];
++    while (source[end]?.role === 'assistant' && source[end].tool_calls?.length) {
++      const message = source[end++];
++      for (let n = 0; n < message.tool_calls.length; n++) {
++        calls.push({ message, call: message.tool_calls[n], first: n === 0 });
++      }
++    }
++    const results = [];
++    let after = end;
++    while (source[after]?.role === 'tool') results.push(source[after++]);
++    const ids = new Set(calls.map(({ call }) => call.id));
++    const byId = new Map(results.map((result) => [result.tool_call_id, result]));
++    if (calls.length > 1 && ids.size === calls.length
++        && calls.every(({ call }) => typeof call.id === 'string' && call.id.length > 0)
++        && results.length === calls.length && byId.size === calls.length
++        && calls.every(({ call }) => byId.has(call.id))) {
++      for (const { message, call, first } of calls) {
++        const assistant = { ...message, content: first ? message.content : null, tool_calls: [call] };
++        if (!first) {
++          delete assistant.reasoning;
++          delete assistant.reasoning_content;
++          delete assistant.reasoning_signature;
++        }
++        out.push(assistant, byId.get(call.id));
++      }
++      i = after;
++    } else if (end > i) {
++      out.push(...source.slice(i, after));
++      i = after;
++    } else {
++      out.push(source[i++]);
++    }
++  }
++  return out;
++}
++
+ export function buildGetChatMessageRequest({ token, messages, model, sessionId, completion, tools, nativeToolCall = false } = {}) {
+   if (!token) throw new Error('DEVIN_CONNECT: missing session token');
+   if (!model) throw new Error('DEVIN_CONNECT: missing model selector');
+@@ -710,7 +755,9 @@
+   let syntheticReadPairs = 0;
+   let systemPrompt = '';
+   const chatMessages = [];
+-  for (const msg of messages || []) {
++  const history = nativeToolCall && /^swe-2-(medium|high|max)$/.test(model)
++    ? pairSwe2ToolHistory(messages) : messages || [];
++  for (const msg of history) {
+     if (msg.role === 'system') {
+       const t = messageText(msg.content);
+       systemPrompt += systemPrompt ? `\n${t}` : t;

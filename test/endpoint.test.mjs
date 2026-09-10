@@ -389,6 +389,9 @@ test("routes every supported model to its provider and applies the default on bo
       [
         "swe-1-6-slow",
         "swe-1-7-lightning",
+        "swe-2-medium",
+        "swe-2-high",
+        "swe-2-max",
         "swe-1-7-lightning",
         "swe-1-7-lightning",
       ],
@@ -875,7 +878,7 @@ test("serves model discovery and readiness without authentication", async () => 
       providers: {
         devin: {
           ready: true,
-          models: ["swe-1-6-slow", "swe-1-7-lightning"],
+          models: ["swe-1-6-slow", "swe-1-7-lightning", "swe-2-medium", "swe-2-high", "swe-2-max"],
         },
         grok: {
           ready: true,

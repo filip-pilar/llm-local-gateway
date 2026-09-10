@@ -9,6 +9,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "windsurf-api@github:dwgx/WindsurfAPI#81370f5": "patches/windsurf-api-swe2-tool-history.patch",
+  },
   "packages": {
     "windsurf-api": ["windsurf-api@github:dwgx/WindsurfAPI#81370f5", { "bin": { "windsurfapi": "src/index.js" } }, "dwgx-WindsurfAPI-81370f5"],
   }
