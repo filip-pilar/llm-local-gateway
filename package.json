@@ -26,6 +26,7 @@
     "test:coverage": "node --test --experimental-test-coverage test/*.test.mjs",
     "test:live-providers": "node test/support/run-live-provider-conformance.mjs",
     "test:native": "node bin/test-native.mjs",
+    "test:live-astra": "node test/support/run-live-astra.mjs",
     "test:live-swe2": "node test/support/run-live-swe2.mjs"
   },
   "bin": {

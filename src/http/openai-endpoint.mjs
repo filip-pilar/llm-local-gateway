@@ -321,6 +321,13 @@ function providerUnavailable(response, protocol, provider) {
   });
 }
 
+export function neutralizeAstraInstructions(body) {
+  if (!/^gpt-6-astra-(low|medium|high|xhigh|max)$/.test(body.model ?? "")) return body;
+  if (body.instructions === undefined) return body;
+  const instructions = "You are a helpful coding assistant. Inspect the workspace with the available tools, make requested edits with the available patch tool, run relevant checks, and finish the requested task before responding. Follow the user's instructions.";
+  return { ...body, instructions };
+}
+
 function forwardResponses({
   request,
   response,
@@ -370,6 +377,11 @@ function forwardResponses({
       },
     });
     return;
+  }
+  const neutralized = neutralizeAstraInstructions(parsed);
+  if (neutralized !== parsed) {
+    parsed = neutralized;
+    payload = Buffer.from(JSON.stringify(parsed));
   }
   const optionsError = modelOptionsError(parsed);
   if (optionsError) {

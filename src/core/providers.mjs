@@ -5,6 +5,11 @@ export const providerModels = Object.freeze({
     "swe-2-medium",
     "swe-2-high",
     "swe-2-max",
+    "gpt-6-astra-low",
+    "gpt-6-astra-medium",
+    "gpt-6-astra-high",
+    "gpt-6-astra-xhigh",
+    "gpt-6-astra-max",
   ]),
   grok: Object.freeze([
     "grok-4.5",

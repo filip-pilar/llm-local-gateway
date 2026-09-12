@@ -169,6 +169,11 @@ private struct GatewayPanel: View {
                         Text("SWE-2 Medium · Devin").tag("swe-2-medium")
                         Text("SWE-2 High · Devin").tag("swe-2-high")
                         Text("SWE-2 Max · Devin").tag("swe-2-max")
+                        Text("Astra Low · Devin").tag("gpt-6-astra-low")
+                        Text("Astra Medium · Devin").tag("gpt-6-astra-medium")
+                        Text("Astra High · Devin").tag("gpt-6-astra-high")
+                        Text("Astra Xhigh · Devin").tag("gpt-6-astra-xhigh")
+                        Text("Astra Max · Devin").tag("gpt-6-astra-max")
                         Text("Grok 4.5 · Grok").tag("grok-4.5")
                     }
                     .labelsHidden()

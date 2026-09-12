@@ -392,6 +392,11 @@ test("routes every supported model to its provider and applies the default on bo
         "swe-2-medium",
         "swe-2-high",
         "swe-2-max",
+        "gpt-6-astra-low",
+        "gpt-6-astra-medium",
+        "gpt-6-astra-high",
+        "gpt-6-astra-xhigh",
+        "gpt-6-astra-max",
         "swe-1-7-lightning",
         "swe-1-7-lightning",
       ],
@@ -878,7 +883,7 @@ test("serves model discovery and readiness without authentication", async () => 
       providers: {
         devin: {
           ready: true,
-          models: ["swe-1-6-slow", "swe-1-7-lightning", "swe-2-medium", "swe-2-high", "swe-2-max"],
+          models: ["swe-1-6-slow", "swe-1-7-lightning", "swe-2-medium", "swe-2-high", "swe-2-max", "gpt-6-astra-low", "gpt-6-astra-medium", "gpt-6-astra-high", "gpt-6-astra-xhigh", "gpt-6-astra-max"],
         },
         grok: {
           ready: true,

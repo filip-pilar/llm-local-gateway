@@ -24,7 +24,12 @@ swe-1-6-slow      ─┐
 swe-1-7-lightning ─┤
 swe-2-medium     ─┤
 swe-2-high       ─┤
-swe-2-max        ─┴─> Devin loopback transport
+swe-2-max        ─┤
+gpt-6-astra-low  ─┤
+gpt-6-astra-medium ┤
+gpt-6-astra-high ─┤
+gpt-6-astra-xhigh ┤
+gpt-6-astra-max  ─┴─> Devin loopback transport
 
 grok-4.5          ────> Grok loopback transport
 ```
@@ -35,6 +40,13 @@ route is selected.
 ## Provider boundaries
 
 ### Devin
+
+The embedded transport enables `DEVIN_CONNECT_IMAGE_TAG=10`, the pinned
+upstream's image wire field. Responses inline image blocks are normalized by
+the upstream adapter and included in Devin messages. This does not fetch
+remote image URLs or add vision capability to models that lack it. Astra
+Medium screenshot transcription was verified through Codex CLI; no request
+body or image data is logged for this check.
 
 The Devin provider reuses the `devin-bridge` implementation:
 
@@ -50,13 +62,24 @@ The Devin provider reuses the `devin-bridge` implementation:
   catalog and unknown selectors fail closed;
 - disables the transport's automatic rate-limit variant fallback;
 - supports `swe-1-6-slow`, `swe-1-7-lightning`, and the exact SWE-2 selectors
-  `swe-2-medium`, `swe-2-high`, and `swe-2-max`.
+  `swe-2-medium`, `swe-2-high`, and `swe-2-max`, plus the exact Astra
+  selectors `gpt-6-astra-low`, `gpt-6-astra-medium`, `gpt-6-astra-high`,
+  `gpt-6-astra-xhigh`, and `gpt-6-astra-max`.
 
-The public boundary rejects SWE-2 effort overrides that differ from the selected
+The public boundary rejects SWE-2 and Astra effort overrides that differ from the selected
 model, unsupported effort levels, disabled thinking, and explicit thinking
 budgets. Matching effort fields and adaptive thinking are accepted. Reasoning
 effort is encoded in the upstream selector; the gateway never substitutes
 another variant.
+
+Astra Low has a gated Codex verification harness with a temporary Codex home,
+no OpenAI authentication, an explicit local Responses provider, and low reasoning.
+It checks the outbound selector and independently returned upstream model ID.
+The gateway replaces Codex's client-owned instruction preamble with a short
+neutral coding instruction for Astra requests. This preserves user input, tool
+declarations, and selector-based reasoning while avoiding Devin's upstream
+content-policy block. The live Codex read/edit/check cycle succeeds. No
+automatic provider fallback is introduced. See [Astra verification](astra-verification.md).
 
 ### Grok
 
@@ -90,7 +113,7 @@ stable provider-unavailable error for models owned by the failed provider.
   "ready": true,
   "default_model": "swe-1-6-slow",
   "providers": {
-    "devin": { "ready": true, "models": ["swe-1-6-slow", "swe-1-7-lightning", "swe-2-medium", "swe-2-high", "swe-2-max"] },
+    "devin": { "ready": true, "models": ["swe-1-6-slow", "swe-1-7-lightning", "swe-2-medium", "swe-2-high", "swe-2-max", "gpt-6-astra-low", "gpt-6-astra-medium", "gpt-6-astra-high", "gpt-6-astra-xhigh", "gpt-6-astra-max"] },
     "grok": { "ready": false, "models": ["grok-4.5"] }
   }
 }

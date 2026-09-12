@@ -11,7 +11,7 @@ export async function observeDevinWire() {
   const requests = [];
   const modelId = (buffer) => {
     const value = buffer?.toString("utf8");
-    return /^swe-2-(medium|high|max)$/.test(value ?? "") ? value : "unexpected";
+    return /^(swe-2-(medium|high|max)|gpt-6-astra-(low|medium|high|xhigh|max))$/.test(value ?? "") ? value : "unexpected";
   };
   __setRequestImpl((options, callback) => {
     const record = { selector: null, upstreamModel: null, status: null, ended: false, error: false };
@@ -25,7 +25,12 @@ export async function observeDevinWire() {
           for (const frame of parser.drain()) {
             if (frame.isEndStream) {
               record.ended = true;
-              record.error = Boolean(JSON.parse(frame.payload.toString() || "{}").error);
+              const error = JSON.parse(frame.payload.toString() || "{}").error;
+              record.error = Boolean(error);
+              if (error) {
+                record.errorCode = ["invalid_argument", "permission_denied", "unauthenticated", "resource_exhausted", "internal", "unavailable", "not_found", "failed_precondition"].includes(error.code) ? error.code : "other";
+                record.errorCategories = ["model", "quota", "credit", "limit", "tool", "system", "message", "permission", "billing", "unsupported", "thinking", "reasoning", "access", "subscription", "content policy", "blocked", "sensitive", "mcp", "configuration", "authentication", "expired"].filter((term) => String(error.message).toLowerCase().includes(term));
+              }
             } else {
               const meta = parseFields(frame.payload).find((f) => f.field === 7 && f.wireType === 2);
               const model = meta && parseFields(meta.value).find((f) => f.field === 9 && f.wireType === 2);

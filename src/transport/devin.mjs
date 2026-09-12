@@ -156,6 +156,7 @@ export async function startDevinTransport({
     DATA_DIR: dataDir,
     DEFAULT_MODEL: defaultModel,
     DEVIN_CONNECT: "1",
+    DEVIN_CONNECT_IMAGE_TAG: "10",
     HOST: host,
     PORT: String(port),
     WINDSURFAPI_ALLOW_UNAUTHENTICATED: "0",

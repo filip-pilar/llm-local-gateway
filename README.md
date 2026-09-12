@@ -23,10 +23,15 @@ Routing is fixed by model ID. There is no fallback.
 | `swe-2-medium` | Devin |
 | `swe-2-high` | Devin |
 | `swe-2-max` | Devin |
+| `gpt-6-astra-low` | Devin |
+| `gpt-6-astra-medium` | Devin |
+| `gpt-6-astra-high` | Devin |
+| `gpt-6-astra-xhigh` | Devin |
+| `gpt-6-astra-max` | Devin |
 | `grok-4.5` | Grok |
 
 Requests with a missing or empty `model` use `LLM_LOCAL_GATEWAY_MODEL`, which
-defaults to `swe-1-6-slow`. Both model-list endpoints always publish all six
+defaults to `swe-1-6-slow`. Both model-list endpoints always publish all eleven
 models.
 
 ## Requirements
@@ -106,6 +111,43 @@ are not inference verification. The official CLI can show promotional free
 pricing for an eligible account; this does not establish billing for proxied
 requests. See [SWE-2 verification](docs/swe-2-verification.md) for the tested
 versions, upstream evidence, and live checks.
+
+## Astra through Devin
+
+Inline image attachments are forwarded through Devin's image wire path.
+Astra Medium has been verified reading screenshot text through Codex CLI.
+Remote image URLs are not fetched by this transport; clients should send
+inline base64 images. Text-only models are not made vision-capable by this setting.
+
+The gateway exposes the exact `gpt-6-astra-low`, `gpt-6-astra-medium`,
+`gpt-6-astra-high`, `gpt-6-astra-xhigh`, and `gpt-6-astra-max` selectors.
+Reasoning options must match the selected suffix; unsupported efforts, disabled
+thinking, and explicit thinking budgets are rejected. Bare `gpt-6-astra` and
+Fast/priority selectors are not exposed. Authentication remains owned by
+`devin auth login`.
+
+Codex CLI integration is verified with Astra Low. Devin's content policy
+rejects Codex's static instruction preamble, so the gateway replaces that
+client-owned preamble with a short neutral coding instruction while preserving
+the user input, tools, and reasoning selector. See [Astra verification](docs/astra-verification.md).
+
+The bounded verifier starts an isolated gateway on port 14817 (and its next
+two ports), uses a temporary Codex home with no OpenAI credentials, and checks
+Devin's actual response model metadata. It deletes temporary state and emits
+only allowlisted diagnostics. These commands consume Devin quota:
+
+```bash
+# Full Codex CLI read/edit/check cycle.
+LLM_LOCAL_GATEWAY_LIVE_ASTRA=1 bun run test:live-astra
+
+# Minimal Responses control; verified working with Astra Low.
+LLM_LOCAL_GATEWAY_LIVE_ASTRA=1 bun run test:live-astra responses
+```
+
+Use `LLM_LOCAL_GATEWAY_LIVE_PORT` to choose another public port. The Codex
+check has a 150-second process timeout; the control has a 60-second request
+timeout. Neither changes normal Codex/router configuration. Other Astra
+efforts have non-live routing coverage but have not been tested with inference.
 
 ## Routes
 
@@ -214,7 +256,7 @@ the authenticated Devin account is entitled to the Lightning model.
 
 The unified menu-bar app supervises the same loopback helper and keeps Devin
 and Grok sign-in, status, readiness, and logout independent. It exposes both
-endpoint URLs, supports all six default models, can launch at login, and has
+endpoint URLs, supports all eleven default models, can launch at login, and has
 an explicit bounded live-verification action. A gateway started outside the app
 is displayed as external and read-only; the app never claims it can stop or
 reconfigure that process. External status shows the observed gateway default

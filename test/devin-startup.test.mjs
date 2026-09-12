@@ -18,6 +18,7 @@ const upstreamEnvironmentKeys = [
   "DEBUG_REQUEST_BODIES",
   "DEFAULT_MODEL",
   "DEVIN_CONNECT",
+  "DEVIN_CONNECT_IMAGE_TAG",
   "DEVIN_CONNECT_DEBUG_META",
   "DEVIN_CONNECT_DUMP_RAW",
   "DEVIN_CONNECT_WIRE_DUMP",
@@ -155,6 +156,7 @@ test("Devin startup reconciles state and configures the pinned upstream", async 
     assert.equal(process.env.CODEIUM_API_KEY, "fixture-token");
     assert.equal(process.env.DATA_DIR, "/fixture/private-state");
     assert.equal(process.env.DEFAULT_MODEL, "swe-1-6-slow");
+    assert.equal(process.env.DEVIN_CONNECT_IMAGE_TAG, "10");
     assert.equal(process.env.HOST, "127.0.0.1");
     assert.equal(process.env.PORT, "4318");
     assert.equal(process.env.WINDSURFAPI_ALLOW_UNAUTHENTICATED, "0");
