@@ -192,10 +192,14 @@ bun run test:native
 bun run test:coverage
 ```
 
-The default suite is non-live: it uses loopback fixtures and mocked upstreams,
-does not perform inference, and does not consume Devin or Grok quota. Live
-provider tests are separately gated by explicit `LLM_LOCAL_GATEWAY_*`
-environment variables:
+`bun run check` always uses the non-live suite: it clears inherited
+`LLM_LOCAL_GATEWAY_LIVE_*` flags and `LLM_LOCAL_GATEWAY_REPLAY_CAPTURE` for its
+child processes, so an earlier live session cannot enable inference or external
+capture loading. It uses loopback fixtures and mocked upstreams and consumes no
+Devin or Grok quota. Direct `bun run test` / `node --test` commands retain their
+environment gates; use `node --test test/replay.test.mjs` for an explicitly
+requested external capture or live replay. Live provider tests are separately
+gated by explicit `LLM_LOCAL_GATEWAY_*` environment variables:
 
 ```bash
 LLM_LOCAL_GATEWAY_LIVE_CONFORMANCE=1 \

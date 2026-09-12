@@ -5,6 +5,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+// This entry point is always non-live, even in a shell used for live probes.
+// External captures are opt-in inputs for the targeted replay test only.
+const checkEnvironment = Object.fromEntries(Object.entries(process.env).filter(
+  ([name]) => !name.startsWith("LLM_LOCAL_GATEWAY_LIVE_")
+    && name !== "LLM_LOCAL_GATEWAY_REPLAY_CAPTURE",
+));
 
 function filesUnder(directory, suffix) {
   return readdirSync(directory, { withFileTypes: true })
@@ -20,6 +26,7 @@ function filesUnder(directory, suffix) {
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: root,
+    env: checkEnvironment,
     encoding: options.capture ? "utf8" : undefined,
     stdio: options.capture ? "pipe" : "inherit",
   });
