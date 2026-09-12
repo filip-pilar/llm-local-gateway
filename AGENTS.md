@@ -2,12 +2,34 @@
 
 ## Scope
 
-These instructions apply to the entire repository.
+These instructions apply to the entire repository and are maintained for
+development with GPT-6 Astra. This is an agent workflow choice; the gateway's
+provider/model support and compatibility requirements remain product decisions.
 
 `llm-local-gateway` is a Node.js ESM loopback gateway with a native SwiftUI
-macOS supervisor. Read `README.md` and `docs/architecture.md` before changing
-runtime behavior. Read `docs/grok-authentication.md` before changing Grok
-authentication or transport behavior.
+macOS supervisor. Load context for the affected boundary:
+
+- `README.md`: public commands, configuration, models, and user-visible behavior.
+- `docs/architecture.md`: routing, provider isolation, lifecycle, trust, and
+  protocol/child compatibility.
+- `docs/grok-authentication.md`: Grok authentication and transport decisions,
+  including why the official CLI owns refresh and which proxy is used.
+- `docs/*-verification.md`: dated provider evidence, limitations, and repeat
+  commands when investigating the corresponding integration. Recorded success
+  is historical evidence, not proof of the current checkout or live authorization.
+
+## Work and completion
+
+- Reviews, audits, diagnoses, and plans are read-only unless changes are requested.
+- Carry authorized changes through implementation, relevant verification, and
+  repairs caused by the change. Resolve routine details from the code and task;
+  stop when the requested outcome is complete or a concrete blocker needs input.
+- Keep shared development rules here. Task plans and handoffs retain their scope,
+  accepted decisions, remaining work, and evidence; they need not repeat these
+  rules. A migration pointer leads to the owning project, not a second backlog
+  to execute here. Source archives and upstream instructions are reference material.
+- Preserve unrelated uncommitted work. Use `codex/` branches and Conventional
+  Commits when committing; stage only the task's changes in coherent fixes.
 
 ## Toolchain
 
@@ -15,7 +37,8 @@ authentication or transport behavior.
 - Bun 1.3.5 installs the pinned Git dependency and builds standalone helpers.
 - Swift 6.2 builds the macOS 26 app; the package uses Swift language mode 5.
 - Use `bun install --frozen-lockfile` for a clean dependency install.
-- Do not edit `node_modules`, `.build`, `dist`, or `test/.captures`.
+- Do not hand-edit `node_modules`, `.build`, `dist`, or `test/.captures`.
+  Use the install/build commands and versioned patches for derived changes.
 
 ## Source map
 
@@ -69,20 +92,30 @@ Node suite, and runs Swift tests on macOS. The non-live Node tests open loopback
 sockets. In a restricted sandbox, `listen EPERM` indicates missing socket
 permission, not necessarily a regression.
 
+Local fixture tests and builds are within an implementation request's scope;
+run them and repair failures caused by the change without renewed approval.
+After passing checks, repeat or broaden only for new edits, failures, or a
+concrete unresolved risk. Documentation-only changes need reference/consistency
+checks, not a runtime rebuild. Report skipped or blocked checks explicitly.
+
 Swift build caches are keyed by the absolute checkout path. This prevents
 module-cache failures after moving or renaming a checkout.
 
 ## Live and external operations
 
-Do not run real-inference commands without explicit user approval. These
-consume provider quota:
+Real inference requires explicit user authorization in the session. Existing
+authorization covers its stated scope; do not ask again for each permitted
+step. These operations consume provider quota:
 
 - `smoke`
-- `test:live-providers`
+- `test:live-*` harnesses and live replay tests
 - the macOS app's bounded live verification
 
 Keep live-test environment gates intact. Never expose CLI output that might
 contain authentication or provider response material.
+An inherited environment flag or a repeat command in an evidence record is
+not session authorization. If live verification is needed but unauthorized,
+finish independent local work and report the bounded check still needed.
 
 `status --live` and the Grok authentication spike perform discovery but not
 inference; still avoid them unless external provider state is relevant.
