@@ -114,7 +114,7 @@ LLM_LOCAL_GATEWAY_SWE2_ROUTER_DIR=/absolute/path/to/subagent-model-router \
 bun run test:live-swe2 router
 ```
 
-For normal use, follow the [Claude Code launcher instructions](../README.md#claude-code-with-swe-2).
+For normal use, follow the [Claude Code launcher instructions](../README.md#connect-a-client-claude-code-with-swe-2).
 Selected-subagent routing uses the router's normal destination/route setup;
 its README documents the optional real-child integration check and effort
 compatibility. The isolated direct launcher intentionally omits normal router
