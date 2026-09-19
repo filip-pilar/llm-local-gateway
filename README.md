@@ -1,38 +1,23 @@
-# llm-local-gateway
+# LLM Local Gateway
 
 Use authenticated Devin and Grok CLI subscriptions through one local OpenAI-
 and Anthropic-compatible API.
 
-The loopback-only daemon exposes these endpoints:
+```text
+Codex / Claude Code / API client
+              │
+              ▼
+  LLM Local Gateway · 127.0.0.1:4317
+              │ model ID selects the provider
+              ├── Devin authentication + transport
+              └── Grok CLI
+```
 
 - OpenAI-compatible base URL: `http://127.0.0.1:4317/openai/v1`
 - Anthropic-compatible base URL: `http://127.0.0.1:4317/claude`
 
-It consolidates the working transport and compatibility code from
-`devin-bridge` and `grok-bridge`. Provider authentication, transport state,
-refresh behavior, errors, lifecycle, and readiness remain separate.
-
-## Models and routing
-
-Routing is fixed by model ID. There is no fallback.
-
-| Model | Provider |
-| --- | --- |
-| `swe-1-6-slow` | Devin |
-| `swe-1-7-lightning` | Devin |
-| `swe-2-medium` | Devin |
-| `swe-2-high` | Devin |
-| `swe-2-max` | Devin |
-| `gpt-6-astra-low` | Devin |
-| `gpt-6-astra-medium` | Devin |
-| `gpt-6-astra-high` | Devin |
-| `gpt-6-astra-xhigh` | Devin |
-| `gpt-6-astra-max` | Devin |
-| `grok-4.5` | Grok |
-
-Requests with a missing or empty `model` use `LLM_LOCAL_GATEWAY_MODEL`, which
-defaults to `swe-1-6-slow`. Both model-list endpoints always publish all eleven
-models.
+Routing is fixed by model ID, with no automatic provider fallback. Provider
+authentication and readiness stay separate; the official CLIs own login.
 
 ## Requirements
 
@@ -48,6 +33,8 @@ continues to use the official credential and its existing Windsurf transport.
 ## Install and run
 
 ```bash
+git clone https://github.com/filip-pilar/llm-local-gateway.git
+cd llm-local-gateway
 bun install --frozen-lockfile
 bun run llm-local-gateway -- serve
 ```
@@ -68,7 +55,7 @@ bun run llm-local-gateway -- smoke --model swe-1-6-slow
 bun run llm-local-gateway -- smoke --model grok-4.5 --protocol claude
 ```
 
-## Claude Code with SWE-2
+## Connect a client: Claude Code with SWE-2
 
 Authenticate the official CLI with the account that has SWE-2 access:
 
@@ -97,6 +84,43 @@ It omits everyday user/project settings, plugins, and MCP servers, preserves
 normal Claude permission prompts, and removes the temporary configuration on
 exit. Sessions in this isolated configuration are temporary. It does not alter
 your normal Claude or router settings or start/stop the gateway.
+
+## Which repo should I use?
+
+| I want to… | Repo |
+| --- | --- |
+| Switch ChatGPT accounts behind a stable endpoint for Codex CLI | [codex-account-gateway](https://github.com/filip-pilar/codex-account-gateway) |
+| Choose Codex accounts and external models from one experimental Mac app | [codex-switchboard](https://github.com/filip-pilar/codex-switchboard) |
+| Expose Devin/Grok CLI access through local OpenAI- and Anthropic-compatible APIs | [llm-local-gateway](https://github.com/filip-pilar/llm-local-gateway) |
+| Assign different models to main agents and named subagents in Codex or Claude Code | [subagent-model-router](https://github.com/filip-pilar/subagent-model-router) |
+
+These are separate tools. Switchboard bundles its own gateway; it does not
+require the other apps. Subagent Model Router can use LLM Local Gateway as a
+destination.
+
+## Models and routing
+
+Routing is fixed by model ID. There is no fallback.
+
+| Model | Provider |
+| --- | --- |
+| `swe-1-6-slow` | Devin |
+| `swe-1-7-lightning` | Devin |
+| `swe-2-medium` | Devin |
+| `swe-2-high` | Devin |
+| `swe-2-max` | Devin |
+| `gpt-6-astra-low` | Devin |
+| `gpt-6-astra-medium` | Devin |
+| `gpt-6-astra-high` | Devin |
+| `gpt-6-astra-xhigh` | Devin |
+| `gpt-6-astra-max` | Devin |
+| `grok-4.5` | Grok |
+
+Requests with a missing or empty `model` use `LLM_LOCAL_GATEWAY_MODEL`, which
+defaults to `swe-1-6-slow`. Both model-list endpoints always publish all eleven
+models.
+
+## Claude Code with SWE-2
 
 The exact upstream IDs are `swe-2-medium`, `swe-2-high`, and `swe-2-max`.
 The gateway intentionally does not expose the moving `swe` alias or a bare
@@ -216,6 +240,36 @@ directory does not, the existing directory is reused automatically.
 - Provider-private reasoning state is not moved across provider boundaries.
 - No automatic provider fallback or third-party plugin system is included.
 
+## macOS app
+
+The unified menu-bar app supervises the same loopback helper and keeps Devin
+and Grok sign-in, status, readiness, and logout independent. It exposes both
+endpoint URLs, supports all eleven default models, can launch at login, and has
+an explicit bounded live-verification action. A gateway started outside the app
+is displayed as external and read-only; the app never claims it can stop or
+reconfigure that process. External status shows the observed gateway default
+without replacing the app's saved preference for its own helper.
+
+Build signed local app bundles:
+
+```bash
+bun run build:macos
+bun run build:macos:debug
+```
+
+The release bundle is written to `dist/LLM Local Gateway.app`. The debug bundle
+opens a normal window for UI testing and defaults to isolated port 4717. Both
+bundles contain the compiled gateway helper and Devin authentication PTY
+driver; neither contains credentials.
+
+Build only the standalone helper:
+
+```bash
+bun run build:helper
+```
+
+See [architecture](docs/architecture.md).
+
 ## Tests
 
 ```bash
@@ -251,36 +305,6 @@ LLM_LOCAL_GATEWAY_LIVE_CONFORMANCE=1 \
 
 These commands consume provider quota. `swe-1-7-lightning` also requires that
 the authenticated Devin account is entitled to the Lightning model.
-
-## macOS app
-
-The unified menu-bar app supervises the same loopback helper and keeps Devin
-and Grok sign-in, status, readiness, and logout independent. It exposes both
-endpoint URLs, supports all eleven default models, can launch at login, and has
-an explicit bounded live-verification action. A gateway started outside the app
-is displayed as external and read-only; the app never claims it can stop or
-reconfigure that process. External status shows the observed gateway default
-without replacing the app's saved preference for its own helper.
-
-Build signed local app bundles:
-
-```bash
-bun run build:macos
-bun run build:macos:debug
-```
-
-The release bundle is written to `dist/LLM Local Gateway.app`. The debug bundle
-opens a normal window for UI testing and defaults to isolated port 4717. Both
-bundles contain the compiled gateway helper and Devin authentication PTY
-driver; neither contains credentials.
-
-Build only the standalone helper:
-
-```bash
-bun run build:helper
-```
-
-See [architecture](docs/architecture.md).
 
 ## License
 
